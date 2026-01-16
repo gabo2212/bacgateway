@@ -1,0 +1,9 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "ignore": [
+    "**/.venv/**"
+  ],
+  "reportMissingImports": false,
+  "reportMissingTypeStubs": false
+}

@@ -1,0 +1,10 @@
+{
+  "python.defaultInterpreterPath": ".venv\\\\Scripts\\\\python.exe",
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingImports": "none",
+    "reportMissingTypeStubs": "none"
+  },
+  "python.analysis.exclude": [
+    "**/.venv/**"
+  ]
+}

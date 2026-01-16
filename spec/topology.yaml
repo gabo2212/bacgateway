@@ -1,0 +1,23 @@
+building:
+  name: "LAB"
+  bacnet_ip_network_number: 1
+  bacnet_udp_port: 47808   # 0xBAC0
+
+gateways:
+  - name: "RASP-1"
+    ip: "192.168.15.50"
+    pan_id: 200
+    channel: 15
+    thermostats:
+      - name: "ZN-10"
+        model: "VT76xx"
+        short_mac: 10
+        ieee: null
+      - name: "ZN-11"
+        model: "VT76xx"
+        short_mac: 11
+        ieee: null
+      - name: "ZN-12"
+        model: "VT76xx"
+        short_mac: 12
+        ieee: null

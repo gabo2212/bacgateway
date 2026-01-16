@@ -1,0 +1,550 @@
+{
+  "enums": {
+    "AI4ConfigZoningEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BAI4ConfigZoningEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "CO2"
+      }
+    },
+    "AnticycleTimeEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BAnticycleTimeEnum.java",
+      "mapping": {
+        "1": "ZERO_MINUTES",
+        "2": "ONE_MINUTE",
+        "3": "TWO_MINUTES",
+        "4": "THREE_MINUTES",
+        "5": "FOUR_MINUTES",
+        "6": "FIVE_MINUTES"
+      }
+    },
+    "AuxConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BAuxConfigEnum.java",
+      "mapping": {
+        "1": "NOT_USED",
+        "2": "NORMALLY_OPENED_WITH_OCC",
+        "3": "NORMALLY_CLOSED_WITH_OCC",
+        "4": "NORMALLY_OPENED_WITH_OCC_AND_FAN",
+        "5": "NORMALLY_CLOSED_WITH_OCC_AND_FAN",
+        "6": "NETWORK_CONTROLLED"
+      }
+    },
+    "BI1ConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BBI1ConfigEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "REM_NSB",
+        "3": "MOTION_NO",
+        "4": "MOTION_NC",
+        "5": "WINDOW"
+      }
+    },
+    "BI1ConfigFcuZoningEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BBI1ConfigFcuZoningEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "MOTION_NO",
+        "3": "MOTION_NC"
+      }
+    },
+    "BI1ConfigRtuZoningEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BBI1ConfigRtuZoningEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "REM_NSB",
+        "3": "REM_OVR",
+        "4": "FILTER",
+        "5": "SERVICE"
+      }
+    },
+    "BI2ConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BBI2ConfigEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "DOOR_DRY",
+        "3": "REM_OVR",
+        "4": "FILTER",
+        "5": "SERVICE"
+      }
+    },
+    "BI2ConfigPFcuEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BBI2ConfigPFcuEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "DOOR_DRY",
+        "3": "REM_OVR"
+      }
+    },
+    "CtrlTypeZoningEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BCtrlTypeZoningEnum.java",
+      "mapping": {
+        "1": "HIGHEST",
+        "2": "AVERAGE_3HIGHEST",
+        "3": "AVERAGE_5HIGHEST"
+      }
+    },
+    "DI1ConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BDI1ConfigEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "REM_NSB",
+        "3": "REM_OVR",
+        "4": "FILTER",
+        "5": "SERVICE",
+        "6": "FAN_LOCK_ALARM"
+      }
+    },
+    "DI2ConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BDI2ConfigEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "REM_NSB",
+        "3": "REM_OVR",
+        "4": "FILTER",
+        "5": "SERVICE",
+        "6": "FAN_LOCK_ALARM"
+      }
+    },
+    "DehumLockoutEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BDehumLockoutEnum.java",
+      "mapping": {
+        "0": "DEHUMIDIFICATION_DISABLED",
+        "1": "DEHUMIDIFICATION_RESTRICTED",
+        "2": "DEHUMIDIFICATION_ENABLED"
+      }
+    },
+    "EffectiveOccupancyEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BEffectiveOccupancyEnum.java",
+      "mapping": {
+        "1": "OCCUPIED",
+        "2": "UNOCCUPIED",
+        "3": "TEMPORARY_OCCUPIED",
+        "4": "STANDBY"
+      }
+    },
+    "FanCtrlEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BFanCtrlEnum.java",
+      "mapping": {
+        "1": "ON",
+        "2": "OFF_AUTO",
+        "3": "OFF_ALL"
+      }
+    },
+    "FanModeFcuEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BFanModeFcuEnum.java",
+      "mapping": {
+        "1": "LOW",
+        "2": "MED",
+        "3": "HIGH",
+        "4": "AUTO",
+        "5": "ON"
+      }
+    },
+    "FanModeK12Enum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BFanModeK12Enum.java",
+      "mapping": {
+        "1": "AUTO",
+        "2": "ON"
+      }
+    },
+    "FanModeRtuHpEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BFanModeRtuHpEnum.java",
+      "mapping": {
+        "1": "ON",
+        "2": "AUTO",
+        "3": "SMART"
+      }
+    },
+    "FanModeSeqEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BFanModeSeqEnum.java",
+      "mapping": {
+        "1": "LOW_MED_HIGH",
+        "2": "LOW_HIGH",
+        "3": "LOW_MED_HIGH_AUTO",
+        "4": "LOW_HIGH_AUTO",
+        "5": "ON_AUTO"
+      }
+    },
+    "FanStatusEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BFanStatusEnum.java",
+      "mapping": {
+        "1": "OFF",
+        "2": "LOW",
+        "3": "MEDIUM",
+        "4": "HIGH"
+      }
+    },
+    "FanStatusFSEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BFanStatusFSEnum.java",
+      "mapping": {
+        "1": "OFF",
+        "2": "ON"
+      }
+    },
+    "FloatingMororTimingEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BFloatingMororTimingEnum.java",
+      "mapping": {
+        "1": "ZERO_POINT_FIVE_MINUTES",
+        "10": "FIVE_MINUTES",
+        "11": "FIVE_POINT_FIVE_MINUTES",
+        "12": "SIX_MINUTES",
+        "13": "SIX_POINT_FIVE_MINUTES",
+        "14": "SEVEN_MINUTES",
+        "15": "SEVEN_POINT_FIVE_MINUTES",
+        "16": "EIGHT_MINUTES",
+        "17": "EIGHT_POINT_FIVE_MINUTES",
+        "18": "NINE_MINUTES",
+        "2": "ONE_MINUTE",
+        "3": "ONE_POINT_FIVE_MINUTES",
+        "4": "TWO_MINUTES",
+        "5": "TWO_POINT_FIVE_MINUTES",
+        "6": "THREE_MINUTES",
+        "7": "THREE_POINT_FIVE_MINUTES",
+        "8": "FOUR_MINUTES",
+        "9": "FOUR_POINT_FIVE_MINUTES"
+      }
+    },
+    "HeatPumpStageEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BHeatPumpStageEnum.java",
+      "mapping": {
+        "1": "ONE_STAGE",
+        "2": "TWO_STAGES"
+      }
+    },
+    "HeatingStagesEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BHeatingStagesEnum.java",
+      "mapping": {
+        "0": "ANALOG_HEAT",
+        "1": "S_1STAGE",
+        "2": "S_2STAGES"
+      }
+    },
+    "KeypadLookoutFcuEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BKeypadLookoutFcuEnum.java",
+      "mapping": {
+        "1": "LEVEL_0",
+        "2": "LEVEL_1",
+        "3": "LEVEL_2",
+        "4": "LEVEL_3",
+        "5": "LEVEL_4",
+        "6": "LEVEL_5"
+      }
+    },
+    "KeypadLookoutFcuZoningEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BKeypadLookoutFcuZoningEnum.java",
+      "mapping": {
+        "1": "LEVEL_0",
+        "2": "LEVEL_1",
+        "3": "LEVEL_2",
+        "4": "LEVEL_3"
+      }
+    },
+    "KeypadLookoutRtuHpEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BKeypadLookoutRtuHpEnum.java",
+      "mapping": {
+        "1": "LEVEL_0",
+        "2": "LEVEL_1",
+        "3": "LEVEL_2"
+      }
+    },
+    "NbEventEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BNbEventEnum.java",
+      "mapping": {
+        "1": "TWO_EVENTS",
+        "2": "FOUR_EVENTS"
+      }
+    },
+    "NbStagesEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BNbStagesEnum.java",
+      "mapping": {
+        "1": "S_1STAGE",
+        "2": "S_2STAGES"
+      }
+    },
+    "NetworkHandleEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BNetworkHandleEnum.java",
+      "mapping": {
+        "1": "DEFAULT_ZONE_HANDLE",
+        "2": "DEFAULT_MINUS_OCCUPANCY",
+        "3": "FULL_RELEASE"
+      }
+    },
+    "OccupancyCommandEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BOccupancyCommandEnum.java",
+      "mapping": {
+        "1": "LOCAL_OCCUPANCY",
+        "2": "OCCUPIED",
+        "3": "UNOCCUPIED"
+      }
+    },
+    "OnOffCtrlCPHEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BOnOffCtrlCPHEnum.java",
+      "mapping": {
+        "1": "THREE_CPH",
+        "2": "FOUR_CPH",
+        "3": "FIVE_CPH",
+        "4": "SIX_CPH",
+        "5": "SEVEN_CPH",
+        "6": "EIGHT_CPH"
+      }
+    },
+    "Out1ConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BOut1ConfigEnum.java",
+      "mapping": {
+        "1": "ONE_OUTPUT",
+        "2": "SEPARATE_OUTPUTS"
+      }
+    },
+    "PBandFcuEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BPBandFcuEnum.java",
+      "mapping": {
+        "1": "PB_FCU_3",
+        "2": "PB_FCU_4",
+        "3": "PB_FCU_5",
+        "4": "PB_FCU_6",
+        "5": "PB_FCU_7",
+        "6": "PB_FCU_8",
+        "7": "PB_FCU_9",
+        "8": "PB_FCU_10"
+      }
+    },
+    "PBandRtuHpEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BPBandRtuHpEnum.java",
+      "mapping": {
+        "1": "PB_HP_RT_2",
+        "2": "PB_HP_RT_3",
+        "3": "PB_HP_RT_4",
+        "4": "PB_HP_RT_5",
+        "5": "PB_HP_RT_6",
+        "6": "PB_HP_RT_7",
+        "7": "PB_HP_RT_8"
+      }
+    },
+    "PIRWeightEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BPIRWeightEnum.java",
+      "mapping": {
+        "1": "ZERO_PRECENT",
+        "2": "TWENTY_FIVE_PRECENT",
+        "3": "FIFTY_PRECENT",
+        "4": "SEVENTY_FIVE_PRECENT",
+        "5": "HUNDRED_PRECENT"
+      }
+    },
+    "PipeNumberEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BPipeNumberEnum.java",
+      "mapping": {
+        "1": "TWO_PIPES",
+        "2": "FOUR_PIPES"
+      }
+    },
+    "PulsedHeatEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BPulsedHeatEnum.java",
+      "mapping": {
+        "1": "OFF",
+        "2": "ON",
+        "3": "OCCUPANCY_OUTPUT"
+      }
+    },
+    "RBI2ConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BRBI2ConfigEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "FILTER",
+        "3": "SERVICE"
+      }
+    },
+    "RTCZoneSequenceEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BRTCZoneSequenceEnum.java",
+      "mapping": {
+        "1": "COOL",
+        "2": "HEAT"
+      }
+    },
+    "RUI1ConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BRUI1ConfigEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "FILTER",
+        "3": "SERVICE",
+        "4": "COC_NH",
+        "5": "COC_NC",
+        "6": "COS"
+      }
+    },
+    "ReheatCPHEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BReheatCPHEnum.java",
+      "mapping": {
+        "1": "TWO_CPH",
+        "2": "THREE_CPH",
+        "3": "FOUR_CPH",
+        "4": "FIVE_CPH",
+        "5": "SIX_CPH",
+        "6": "SEVEN_CPH",
+        "7": "EIGHT_CPH"
+      }
+    },
+    "ReheatConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BReheatConfigEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "ANALOG_DUCT_HEATER_ONLY",
+        "3": "ON_OFF_DUCT_HEATER_ONLY",
+        "4": "ON_OFF_PERIPHERAL_HEATING_ONLY",
+        "5": "ANALOG_DUCT_AND_ON_OFF_PERIPHERAL_HEATING"
+      }
+    },
+    "ReheatConfigUniversalEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BReheatConfigUniversalEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "MODULATING_DUCT_HEATER_ONLY",
+        "3": "ON_OFF_DUCT_HEATER_ONLY",
+        "4": "ON_OFF_PERIPHERAL_HEATING_ONLY",
+        "5": "MODULATING_DUCT_AND_ON_OFF_PERIPHERAL_HEATING",
+        "6": "ON_OFF_DUCT_HEATER_AND_PERI_HEATING"
+      }
+    },
+    "SequenceOfOperationEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BSequenceOfOperationEnum.java",
+      "mapping": {
+        "1": "COOLING_ONLY",
+        "2": "HEATING_ONLY",
+        "3": "COOLING_AND_REHEAT",
+        "4": "HEATING_AND_REHEAT",
+        "5": "COOLING_HEATING_4PIPES",
+        "6": "COOLING_HEATING_4PIPES_AND_REHEAT"
+      }
+    },
+    "SequenceOfOperationK12Enum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BSequenceOfOperationK12Enum.java",
+      "mapping": {
+        "1": "COOLING_ONLY",
+        "2": "HEATING_ONLY",
+        "3": "COOLING_AND_REHEAT",
+        "4": "HEATING_AND_REHEAT"
+      }
+    },
+    "SequenceOfOperationPFcuEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BSequenceOfOperationPFcuEnum.java",
+      "mapping": {
+        "1": "COOLING_ONLY",
+        "2": "HEATING_ONLY",
+        "3": "COOLING_WITH_ELECTRIC_REHEAT",
+        "4": "HEATING_WITH_ELECTRIC_REHEAT",
+        "5": "ELECTRIC_REHEAT_ONLY"
+      }
+    },
+    "StaticPresureRangeEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BStaticPresureRangeEnum.java",
+      "mapping": {
+        "1": "SP_RANGE_0",
+        "2": "SP_RANGE_1",
+        "3": "SP_RANGE_2",
+        "4": "SP_RANGE_3",
+        "5": "SP_RANGE_4"
+      }
+    },
+    "SystemModeHpEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BSystemModeHpEnum.java",
+      "mapping": {
+        "1": "OFF",
+        "2": "AUTO",
+        "3": "COOL",
+        "4": "HEAT",
+        "5": "EMERGENCY"
+      }
+    },
+    "SystemModeRtuEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BSystemModeRtuEnum.java",
+      "mapping": {
+        "1": "OFF",
+        "2": "AUTO",
+        "3": "COOL",
+        "4": "HEAT"
+      }
+    },
+    "SystemModeRtuZoningEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BSystemModeRtuZoningEnum.java",
+      "mapping": {
+        "1": "OFF",
+        "2": "AUTO"
+      }
+    },
+    "TemporaryOccTime12HEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BTemporaryOccTime12HEnum.java",
+      "mapping": {
+        "1": "ZERO_HOURS",
+        "10": "NINE_HOURS",
+        "11": "TEN_HOURS",
+        "12": "ELEVEN_HOURS",
+        "13": "TWELVE_HOURS",
+        "2": "ONE_HOUR",
+        "3": "TWO_HOURS",
+        "4": "THREE_HOURS",
+        "5": "FOUR_HOURS",
+        "6": "FIVE_HOURS",
+        "7": "SIX_HOURS",
+        "8": "SEVEN_HOURS",
+        "9": "EIGHT_HOURS"
+      }
+    },
+    "TemporaryOccTime24HEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BTemporaryOccTime24HEnum.java",
+      "mapping": {
+        "1": "ZERO_HOURS",
+        "10": "NINE_HOURS",
+        "11": "TEN_HOURS",
+        "12": "ELEVEN_HOURS",
+        "13": "TWELVE_HOURS",
+        "14": "THIRTEEN_HOURS",
+        "15": "FOURTEEN_HOURS",
+        "16": "FIFTEEN_HOURS",
+        "17": "SIXTEEN_HOURS",
+        "18": "SEVENTEEN_HOURS",
+        "19": "EIGHTEEN_HOURS",
+        "2": "ONE_HOUR",
+        "20": "NINETEEN_HOURS",
+        "21": "TWENTY_HOURS",
+        "22": "TWENTY_ONE_HOURS",
+        "23": "TWENTY_TWO_HOURS",
+        "24": "TWENTY_THREE_HOURS",
+        "25": "TWENTY_FOUR_HOURS",
+        "3": "TWO_HOURS",
+        "4": "THREE_HOURS",
+        "5": "FOUR_HOURS",
+        "6": "FIVE_HOURS",
+        "7": "SIX_HOURS",
+        "8": "SEVEN_HOURS",
+        "9": "EIGHT_HOURS"
+      }
+    },
+    "ThreeToEightCPHEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BThreeToEightCPHEnum.java",
+      "mapping": {
+        "1": "THREE_CPH",
+        "2": "FOUR_CPH",
+        "3": "FIVE_CPH",
+        "4": "SIX_CPH",
+        "5": "SEVEN_CPH",
+        "6": "EIGHT_CPH"
+      }
+    },
+    "ThreeToFourCPHEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BThreeToFourCPHEnum.java",
+      "mapping": {
+        "1": "THREE_CPH",
+        "2": "FOUR_CPH"
+      }
+    },
+    "UI3ConfigEnum": {
+      "constraints": "defined in vwirelessTstatDevices_src\\sources\\com\\viconics\\wirelessTstatDevices\\point\\frozenenums\\BUI3ConfigEnum.java",
+      "mapping": {
+        "1": "NONE",
+        "2": "COC_NH",
+        "3": "COC_NC",
+        "4": "COS",
+        "5": "SS"
+      }
+    }
+  }
+}

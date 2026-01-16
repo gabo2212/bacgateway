@@ -1,0 +1,8 @@
+serial_port: "COM3"  # or /dev/ttyUSB0
+baud: 57600
+rtscts: true
+poll_interval_seconds: 5
+# Optional tuning:
+# response_timeout_seconds: 2.0
+# retry_count: 3
+# inter_message_delay_seconds: 0.01

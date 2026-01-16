@@ -1,0 +1,36 @@
+thermostats:
+  AC1:
+    description: "Lab thermostat AC-1 (DEVICE2 in FX)"
+    logical_id: "AC1_DEVICE2"
+    comm_addr: 10
+    model: "VT76xx"
+    points:
+      room_temperature:
+        niagara_name: "RoomTemperature"
+        point_addr_hex: "0x1000"
+        engineering_units: "fahrenheit"
+        writable: false
+        bacnet:
+          object_type: "analogInput"
+          instance: 1000
+          object_name: "AC1 Room Temperature"
+
+      occ_cool_setpoint:
+        niagara_name: "OccupiedCoolingSetpoint"
+        point_addr_hex: "0x1005"
+        engineering_units: "fahrenheit"
+        writable: true
+        bacnet:
+          object_type: "analogValue"
+          instance: 1005
+          object_name: "AC1 Occ Cool SP"
+
+      pi_cooling_demand:
+        niagara_name: "PICoolingDemand"
+        point_addr_hex: "0x10bb"
+        engineering_units: "percent"
+        writable: false
+        bacnet:
+          object_type: "analogInput"
+          instance: 1099
+          object_name: "AC1 PI Cooling Demand"
