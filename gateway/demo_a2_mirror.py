@@ -589,13 +589,6 @@ class MirrorService:
         logger.info("Reverted %s Present_Value to %s after failed write", point, value)
 
     def nudge_from_http(self, point: PointName, delta: float) -> WriteOutcome:
-        if self._loop is None:
-            return WriteOutcome(
-                ok=False,
-                error_code="communicationFailure",
-                message="Service loop is not initialized",
-                status=None,
-            )
         current = self.state.current_point(point)
         if current is None:
             return WriteOutcome(
@@ -605,14 +598,24 @@ class MirrorService:
                 status=None,
             )
         target = current + delta
+        return self.write_from_http(point, target)
+
+    def write_from_http(self, point: PointName, value: float) -> WriteOutcome:
+        if self._loop is None:
+            return WriteOutcome(
+                ok=False,
+                error_code="communicationFailure",
+                message="Service loop is not initialized",
+                status=None,
+            )
         future = asyncio.run_coroutine_threadsafe(
-            self.handle_bacnet_write(point, target),
+            self.handle_bacnet_write(point, value),
             self._loop,
         )
         try:
             return future.result(timeout=max(5.0, self.cfg.niagara.timeout_sec + 2.0))
         except Exception as exc:  # noqa: BLE001 - HTTP layer should not crash service
-            logger.warning("HTTP nudge failed for %s: %s", point, exc)
+            logger.warning("HTTP write failed for %s: %s", point, exc)
             return WriteOutcome(
                 ok=False,
                 error_code="communicationFailure",
@@ -672,34 +675,57 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib signature
             parsed = urlparse(self.path)
-            if parsed.path != "/nudge":
+            if parsed.path not in {"/nudge", "/write"}:
                 self._write_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
                 return
 
             params = parse_qs(parsed.query)
             point_raw = (params.get("point") or [""])[0].strip().lower()
-            delta_raw = (params.get("delta") or [""])[0].strip()
             if point_raw not in {"heat", "cool"}:
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "point must be heat or cool"})
                 return
 
-            try:
-                delta = float(delta_raw)
-            except ValueError:
-                self._write_json(HTTPStatus.BAD_REQUEST, {"error": "delta must be numeric"})
-                return
+            if parsed.path == "/nudge":
+                delta_raw = (params.get("delta") or [""])[0].strip()
+                try:
+                    delta = float(delta_raw)
+                except ValueError:
+                    self._write_json(HTTPStatus.BAD_REQUEST, {"error": "delta must be numeric"})
+                    return
 
-            outcome = service.nudge_from_http(point_raw, delta)  # type: ignore[arg-type]
-            status = HTTPStatus.OK if outcome.ok else HTTPStatus.BAD_GATEWAY
-            self._write_json(
-                status,
-                {
+                outcome = service.nudge_from_http(point_raw, delta)  # type: ignore[arg-type]
+                payload: dict[str, Any] = {
                     "ok": outcome.ok,
                     "point": point_raw,
                     "delta": delta,
                     "status": outcome.status,
                     "error": outcome.message,
-                },
+                }
+            else:
+                value_raw = (params.get("value") or [""])[0].strip()
+                try:
+                    value = float(value_raw)
+                except ValueError:
+                    self._write_json(HTTPStatus.BAD_REQUEST, {"error": "value must be numeric"})
+                    return
+                outcome = service.write_from_http(point_raw, value)  # type: ignore[arg-type]
+                payload = {
+                    "ok": outcome.ok,
+                    "point": point_raw,
+                    "value": value,
+                    "status": outcome.status,
+                    "error": outcome.message,
+                }
+
+            if outcome.ok:
+                status = HTTPStatus.OK
+            elif outcome.error_code in {"valueOutOfRange", "writeAccessDenied"}:
+                status = HTTPStatus.BAD_REQUEST
+            else:
+                status = HTTPStatus.BAD_GATEWAY
+            self._write_json(
+                status,
+                payload,
             )
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
@@ -725,6 +751,12 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
             health = service.health_payload()
             last_write = health.get("last_write")
             last_write_text = json.dumps(last_write, indent=2) if last_write else "None"
+            write_min = service.cfg.bacnet.write_min_f
+            write_max = service.cfg.bacnet.write_max_f
+            heat_value = health.get("occ_heat_sp_f")
+            cool_value = health.get("occ_cool_sp_f")
+            heat_input = "" if heat_value is None else f"{float(heat_value):.1f}"
+            cool_input = "" if cool_value is None else f"{float(cool_value):.1f}"
             return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -735,20 +767,38 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
     .card {{ background: #ffffff; border: 1px solid #dbe3f0; border-radius: 8px; padding: 16px; max-width: 860px; }}
     code, pre {{ background: #eef2ff; padding: 4px 6px; border-radius: 4px; }}
     .row {{ margin-bottom: 8px; }}
-    .controls {{ margin: 12px 0; display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 8px; }}
+    .point {{ margin-top: 10px; padding: 10px; border: 1px solid #dbe3f0; border-radius: 8px; background: #f8faff; }}
+    .point-line {{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }}
+    .point-name {{ min-width: 120px; font-weight: 700; }}
+    .point-value {{ min-width: 90px; }}
+    .value-input {{ width: 92px; padding: 6px; border: 1px solid #b3c2de; border-radius: 6px; }}
     button {{ border: 1px solid #93a7cf; background: #e8efff; color: #1f2937; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; }}
     button:hover {{ background: #d9e6ff; }}
     .hint {{ color: #475569; font-size: 13px; }}
   </style>
   <script>
-    async function nudge(point, delta) {{
-      const r = await fetch(`/nudge?point=${{point}}&delta=${{delta}}`, {{ method: 'POST' }});
-      const body = await r.json();
+    function showResult(body) {{
       const out = document.getElementById('nudge_result');
       out.textContent = JSON.stringify(body, null, 2);
       setTimeout(() => location.reload(), 800);
     }}
-    setInterval(() => location.reload(), 5000);
+
+    async function nudge(point, delta) {{
+      const url = '/nudge?point=' + encodeURIComponent(point) + '&delta=' + encodeURIComponent(delta);
+      const r = await fetch(url, {{ method: 'POST' }});
+      const body = await r.json();
+      showResult(body);
+    }}
+
+    async function writePoint(point) {{
+      const input = document.getElementById(point + '_value');
+      const value = input ? input.value : '';
+      const url = '/write?point=' + encodeURIComponent(point) + '&value=' + encodeURIComponent(value);
+      const r = await fetch(url, {{ method: 'POST' }});
+      const body = await r.json();
+      showResult(body);
+    }}
+    setInterval(() => location.reload(), 3000);
   </script>
 </head>
 <body>
@@ -762,19 +812,37 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
     <div class="row"><strong>occ_heat_sp_f:</strong> {health.get("occ_heat_sp_f")}</div>
     <div class="row"><strong>occ_cool_sp_f:</strong> {health.get("occ_cool_sp_f")}</div>
     <div class="row"><strong>last_error:</strong> {health.get("last_error")}</div>
-    <div class="controls">
-      <button onclick="nudge('heat', 0.5)">Heat +0.5F</button>
-      <button onclick="nudge('heat', -0.5)">Heat -0.5F</button>
-      <button onclick="nudge('cool', 0.5)">Cool +0.5F</button>
-      <button onclick="nudge('cool', -0.5)">Cool -0.5F</button>
+
+    <div class="point">
+      <div class="point-line">
+        <span class="point-name">Heat SP</span>
+        <span class="point-value">{health.get("occ_heat_sp_f")} F</span>
+        <button onclick="nudge('heat', -0.5)">-</button>
+        <button onclick="nudge('heat', 0.5)">+</button>
+        <input id="heat_value" class="value-input" type="number" step="0.1" min="{write_min}" max="{write_max}" value="{heat_input}" />
+        <button onclick="writePoint('heat')">Write</button>
+      </div>
     </div>
-    <div class="hint">Page auto-refreshes every 5s.</div>
+
+    <div class="point">
+      <div class="point-line">
+        <span class="point-name">Cool SP</span>
+        <span class="point-value">{health.get("occ_cool_sp_f")} F</span>
+        <button onclick="nudge('cool', -0.5)">-</button>
+        <button onclick="nudge('cool', 0.5)">+</button>
+        <input id="cool_value" class="value-input" type="number" step="0.1" min="{write_min}" max="{write_max}" value="{cool_input}" />
+        <button onclick="writePoint('cool')">Write</button>
+      </div>
+    </div>
+
+    <div class="hint">Writable points are numeric real values in range {write_min}-{write_max}F. Page auto-refreshes every 3s.</div>
     <h2>nudge_result</h2>
     <pre id="nudge_result">None</pre>
     <h2>last_write</h2>
     <pre>{last_write_text}</pre>
     <p>Health JSON: <a href="/health">/health</a></p>
     <p>Nudge: <code>POST /nudge?point=heat|cool&delta=1</code></p>
+    <p>Write: <code>POST /write?point=heat|cool&value=72.0</code></p>
   </div>
 </body>
 </html>"""
