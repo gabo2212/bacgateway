@@ -386,55 +386,111 @@ class NiagaraClient:
     def write_real(self, ord_path: str, value: float, ensure_auth: bool = True) -> WriteResult:
         if ensure_auth:
             self.ensure_login(ord_path)
-        body = (
+
+        numeric_value = float(value)
+        xml_body = (
             '<real xmlns="http://obix.org/ns/schema/1.0" '
-            f'val="{float(value)}"/>'
+            f'val="{numeric_value}"/>'
         ).encode("utf-8")
-        headers = {
-            "Content-Type": "application/xml; charset=utf-8",
-            "Accept": "application/xml,text/xml,*/*",
-        }
+        text_body = str(numeric_value).encode("utf-8")
+        form_body = urllib.parse.urlencode({"value": str(numeric_value)}).encode("utf-8")
 
-        first = self._request_with_reauth(
-            method="PUT",
-            path="/ord",
-            ord_query=ord_path,
-            data=body,
-            headers=headers,
-            probe_ord_path=self._probe_ord_path or ord_path,
-        )
-        if 200 <= first.status < 300:
-            return WriteResult(ok=True, status=first.status, error=None, response_body=first.body)
+        attempts: list[tuple[str, Mapping[str, str], bytes, str]] = [
+            (
+                "PUT",
+                {
+                    "Content-Type": "application/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                xml_body,
+                "put_xml_application",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "application/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                xml_body,
+                "post_xml_application",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "text/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                xml_body,
+                "post_xml_text",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "Accept": "*/*",
+                },
+                text_body,
+                "post_text_plain",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "*/*",
+                },
+                form_body,
+                "post_form_value",
+            ),
+        ]
 
-        if self._should_retry_post(first):
-            logger.info("Niagara write PUT unsupported, retrying with POST for %s", ord_path)
-            second = self._request_with_reauth(
-                method="POST",
+        failure_bits: list[str] = []
+        last_response: _Response | None = None
+        for method, headers, body, label in attempts:
+            response = self._request_with_reauth(
+                method=method,
                 path="/ord",
                 ord_query=ord_path,
                 data=body,
                 headers=headers,
                 probe_ord_path=self._probe_ord_path or ord_path,
             )
-            if 200 <= second.status < 300:
+            last_response = response
+            logger.info(
+                "niagara_write_attempt path=%s mode=%s method=%s status=%s",
+                ord_path,
+                label,
+                method,
+                response.status,
+            )
+            if 200 <= response.status < 300:
                 return WriteResult(
                     ok=True,
-                    status=second.status,
+                    status=response.status,
                     error=None,
-                    response_body=second.body,
+                    response_body=response.body,
                 )
+            failure_bits.append(f"{label}:{response.status}")
+            if response.status in (405, 501) or self._should_retry_post(response):
+                continue
+            # For all other non-2xx responses, keep trying the remaining compatibility fallbacks.
+
+        if last_response is None:  # pragma: no cover - defensive
             return WriteResult(
                 ok=False,
-                status=second.status,
-                error=f"Niagara write failed with POST status={second.status}",
-                response_body=second.body,
+                status=None,
+                error="Niagara write failed: no response",
+                response_body=None,
             )
 
+        body_snippet = self._sanitize_body_snippet(last_response.body)
+        detail = f"responses={','.join(failure_bits)}"
+        if body_snippet:
+            detail = f"{detail} body={body_snippet!r}"
         return WriteResult(
             ok=False,
-            status=first.status,
-            error=f"Niagara write failed with PUT status={first.status}",
-            response_body=first.body,
+            status=last_response.status,
+            error=f"Niagara write failed ({detail})",
+            response_body=last_response.body,
         )
 
     def _ensure_login_locked(self, probe_ord_path: str | None) -> None:
