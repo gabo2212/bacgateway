@@ -735,7 +735,21 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
     .card {{ background: #ffffff; border: 1px solid #dbe3f0; border-radius: 8px; padding: 16px; max-width: 860px; }}
     code, pre {{ background: #eef2ff; padding: 4px 6px; border-radius: 4px; }}
     .row {{ margin-bottom: 8px; }}
+    .controls {{ margin: 12px 0; display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 8px; }}
+    button {{ border: 1px solid #93a7cf; background: #e8efff; color: #1f2937; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; }}
+    button:hover {{ background: #d9e6ff; }}
+    .hint {{ color: #475569; font-size: 13px; }}
   </style>
+  <script>
+    async function nudge(point, delta) {{
+      const r = await fetch(`/nudge?point=${{point}}&delta=${{delta}}`, {{ method: 'POST' }});
+      const body = await r.json();
+      const out = document.getElementById('nudge_result');
+      out.textContent = JSON.stringify(body, null, 2);
+      setTimeout(() => location.reload(), 800);
+    }}
+    setInterval(() => location.reload(), 5000);
+  </script>
 </head>
 <body>
   <div class="card">
@@ -748,6 +762,15 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
     <div class="row"><strong>occ_heat_sp_f:</strong> {health.get("occ_heat_sp_f")}</div>
     <div class="row"><strong>occ_cool_sp_f:</strong> {health.get("occ_cool_sp_f")}</div>
     <div class="row"><strong>last_error:</strong> {health.get("last_error")}</div>
+    <div class="controls">
+      <button onclick="nudge('heat', 0.5)">Heat +0.5F</button>
+      <button onclick="nudge('heat', -0.5)">Heat -0.5F</button>
+      <button onclick="nudge('cool', 0.5)">Cool +0.5F</button>
+      <button onclick="nudge('cool', -0.5)">Cool -0.5F</button>
+    </div>
+    <div class="hint">Page auto-refreshes every 5s.</div>
+    <h2>nudge_result</h2>
+    <pre id="nudge_result">None</pre>
     <h2>last_write</h2>
     <pre>{last_write_text}</pre>
     <p>Health JSON: <a href="/health">/health</a></p>
@@ -858,7 +881,7 @@ def load_demo_config(path: str | Path) -> DemoA2Config:
         write_rate_limit_sec=float(raw_bacnet.get("write_rate_limit_sec", 1.0)),
     )
     service_cfg = ServiceConfig(
-        poll_interval_sec=float(raw_service.get("poll_interval_sec", 1.0))
+        poll_interval_sec=float(raw_service.get("poll_interval_sec", 0.5))
     )
     status_cfg = StatusHttpConfig(
         bind=str(raw_status.get("bind", "127.0.0.1")),

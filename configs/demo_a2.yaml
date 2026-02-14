@@ -41,7 +41,7 @@ bacnet:
   write_rate_limit_sec: 1.0
 
 service:
-  poll_interval_sec: 1.0
+  poll_interval_sec: 0.5
 
 status_http:
   bind: "127.0.0.1"
