@@ -780,14 +780,20 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
     function showResult(body) {{
       const out = document.getElementById('nudge_result');
       out.textContent = JSON.stringify(body, null, 2);
-      setTimeout(() => location.reload(), 800);
     }}
 
-    async function nudge(point, delta) {{
-      const url = '/nudge?point=' + encodeURIComponent(point) + '&delta=' + encodeURIComponent(delta);
-      const r = await fetch(url, {{ method: 'POST' }});
-      const body = await r.json();
-      showResult(body);
+    function adjustValue(point, delta) {{
+      const input = document.getElementById(point + '_value');
+      if (!input) return;
+      const current = Number.parseFloat(input.value);
+      const base = Number.isFinite(current) ? current : 0.0;
+      const next = base + delta;
+      const minVal = Number.parseFloat(input.min);
+      const maxVal = Number.parseFloat(input.max);
+      let clamped = next;
+      if (Number.isFinite(minVal)) clamped = Math.max(minVal, clamped);
+      if (Number.isFinite(maxVal)) clamped = Math.min(maxVal, clamped);
+      input.value = clamped.toFixed(1);
     }}
 
     async function writePoint(point) {{
@@ -798,7 +804,6 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
       const body = await r.json();
       showResult(body);
     }}
-    setInterval(() => location.reload(), 3000);
   </script>
 </head>
 <body>
@@ -817,8 +822,8 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
       <div class="point-line">
         <span class="point-name">Heat SP</span>
         <span class="point-value">{health.get("occ_heat_sp_f")} F</span>
-        <button onclick="nudge('heat', -0.5)">-</button>
-        <button onclick="nudge('heat', 0.5)">+</button>
+        <button onclick="adjustValue('heat', -0.5)">-</button>
+        <button onclick="adjustValue('heat', 0.5)">+</button>
         <input id="heat_value" class="value-input" type="number" step="0.1" min="{write_min}" max="{write_max}" value="{heat_input}" />
         <button onclick="writePoint('heat')">Write</button>
       </div>
@@ -828,14 +833,14 @@ def _build_status_handler(service: MirrorService) -> type[BaseHTTPRequestHandler
       <div class="point-line">
         <span class="point-name">Cool SP</span>
         <span class="point-value">{health.get("occ_cool_sp_f")} F</span>
-        <button onclick="nudge('cool', -0.5)">-</button>
-        <button onclick="nudge('cool', 0.5)">+</button>
+        <button onclick="adjustValue('cool', -0.5)">-</button>
+        <button onclick="adjustValue('cool', 0.5)">+</button>
         <input id="cool_value" class="value-input" type="number" step="0.1" min="{write_min}" max="{write_max}" value="{cool_input}" />
         <button onclick="writePoint('cool')">Write</button>
       </div>
     </div>
 
-    <div class="hint">Writable points are numeric real values in range {write_min}-{write_max}F. Page auto-refreshes every 3s.</div>
+    <div class="hint">Writable points are numeric real values in range {write_min}-{write_max}F. Writes are sent only when you click Write.</div>
     <h2>nudge_result</h2>
     <pre id="nudge_result">None</pre>
     <h2>last_write</h2>
