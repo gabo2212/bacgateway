@@ -392,6 +392,11 @@ class NiagaraClient:
             self.ensure_login(ord_path)
 
         numeric_value = float(value)
+        path_l = ord_path.lower()
+        prefer_override_status = bool(
+            path_l.endswith("/writevalue")
+            or re.search(r"/in\d+$", path_l) is not None
+        )
         xml_body = (
             '<real xmlns="http://obix.org/ns/schema/1.0" '
             f'val="{numeric_value}"/>'
@@ -400,9 +405,23 @@ class NiagaraClient:
             '<real xmlns="http://obix.org/ns/schema/1.0" '
             f'val="{numeric_value}" status="ok"/>'
         ).encode("utf-8")
+        xml_body_status_overridden = (
+            '<real xmlns="http://obix.org/ns/schema/1.0" '
+            f'val="{numeric_value}" status="overridden"/>'
+        ).encode("utf-8")
+        xml_body_status_overr = (
+            '<real xmlns="http://obix.org/ns/schema/1.0" '
+            f'val="{numeric_value}" status="overr"/>'
+        ).encode("utf-8")
         xml_body_no_ns = f'<real val="{numeric_value}"/>'.encode("utf-8")
         xml_body_no_ns_status = (
             f'<real val="{numeric_value}" status="ok"/>'
+        ).encode("utf-8")
+        xml_body_no_ns_status_overridden = (
+            f'<real val="{numeric_value}" status="overridden"/>'
+        ).encode("utf-8")
+        xml_body_no_ns_status_overr = (
+            f'<real val="{numeric_value}" status="overr"/>'
         ).encode("utf-8")
         obj_arg_body = (
             '<obj xmlns="http://obix.org/ns/schema/1.0">'
@@ -424,11 +443,26 @@ class NiagaraClient:
             f'<real name="value" val="{numeric_value}" status="ok"/>'
             "</obj>"
         ).encode("utf-8")
+        obj_overridden_value_body = (
+            '<obj xmlns="http://obix.org/ns/schema/1.0">'
+            f'<real name="value" val="{numeric_value}" status="overridden"/>'
+            "</obj>"
+        ).encode("utf-8")
+        obj_overr_value_body = (
+            '<obj xmlns="http://obix.org/ns/schema/1.0">'
+            f'<real name="value" val="{numeric_value}" status="overr"/>'
+            "</obj>"
+        ).encode("utf-8")
         text_body = str(numeric_value).encode("utf-8")
+        text_body_overr = f"{numeric_value} {{overr}}".encode("utf-8")
+        text_body_overridden = f"{numeric_value} {{overridden}}".encode("utf-8")
         form_body = urllib.parse.urlencode({"value": str(numeric_value)}).encode("utf-8")
         form_arg_body = urllib.parse.urlencode({"arg": str(numeric_value)}).encode("utf-8")
         form_in_body = urllib.parse.urlencode({"in": str(numeric_value)}).encode("utf-8")
         form_val_body = urllib.parse.urlencode({"val": str(numeric_value)}).encode("utf-8")
+        form_value_overr_body = urllib.parse.urlencode(
+            {"value": f"{numeric_value} {{overr}}"}
+        ).encode("utf-8")
 
         attempts: list[tuple[str, Mapping[str, str], bytes, str]] = [
             (
@@ -576,6 +610,119 @@ class NiagaraClient:
                 "post_form_val",
             ),
         ]
+
+        if prefer_override_status:
+            override_attempts: list[tuple[str, Mapping[str, str], bytes, str]] = [
+                (
+                    "PUT",
+                    {
+                        "Content-Type": "application/xml; charset=utf-8",
+                        "Accept": "application/xml,text/xml,*/*",
+                    },
+                    xml_body_status_overridden,
+                    "put_xml_status_overridden",
+                ),
+                (
+                    "PUT",
+                    {
+                        "Content-Type": "application/xml; charset=utf-8",
+                        "Accept": "application/xml,text/xml,*/*",
+                    },
+                    xml_body_status_overr,
+                    "put_xml_status_overr",
+                ),
+                (
+                    "PUT",
+                    {
+                        "Content-Type": "text/xml; charset=utf-8",
+                        "Accept": "application/xml,text/xml,*/*",
+                    },
+                    obj_overridden_value_body,
+                    "put_obj_value_status_overridden",
+                ),
+                (
+                    "PUT",
+                    {
+                        "Content-Type": "text/xml; charset=utf-8",
+                        "Accept": "application/xml,text/xml,*/*",
+                    },
+                    obj_overr_value_body,
+                    "put_obj_value_status_overr",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "application/xml; charset=utf-8",
+                        "Accept": "application/xml,text/xml,*/*",
+                    },
+                    xml_body_status_overridden,
+                    "post_xml_status_overridden",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "application/xml; charset=utf-8",
+                        "Accept": "application/xml,text/xml,*/*",
+                    },
+                    xml_body_no_ns_status_overridden,
+                    "post_xml_no_ns_status_overridden",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "application/xml; charset=utf-8",
+                        "Accept": "application/xml,text/xml,*/*",
+                    },
+                    xml_body_no_ns_status_overr,
+                    "post_xml_no_ns_status_overr",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "text/xml; charset=utf-8",
+                        "Accept": "application/xml,text/xml,*/*",
+                    },
+                    obj_overridden_value_body,
+                    "post_obj_value_status_overridden",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "text/xml; charset=utf-8",
+                        "Accept": "application/xml,text/xml,*/*",
+                    },
+                    obj_overr_value_body,
+                    "post_obj_value_status_overr",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "text/plain; charset=utf-8",
+                        "Accept": "*/*",
+                    },
+                    text_body_overr,
+                    "post_text_overr",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "text/plain; charset=utf-8",
+                        "Accept": "*/*",
+                    },
+                    text_body_overridden,
+                    "post_text_overridden",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "*/*",
+                    },
+                    form_value_overr_body,
+                    "post_form_value_overr",
+                ),
+            ]
+            attempts = override_attempts + attempts
 
         failure_bits: list[str] = []
         last_response: _Response | None = None
