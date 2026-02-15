@@ -392,8 +392,27 @@ class NiagaraClient:
             '<real xmlns="http://obix.org/ns/schema/1.0" '
             f'val="{numeric_value}"/>'
         ).encode("utf-8")
+        xml_body_no_ns = f'<real val="{numeric_value}"/>'.encode("utf-8")
+        obj_arg_body = (
+            '<obj xmlns="http://obix.org/ns/schema/1.0">'
+            f'<real name="arg" val="{numeric_value}"/>'
+            "</obj>"
+        ).encode("utf-8")
+        obj_in_body = (
+            '<obj xmlns="http://obix.org/ns/schema/1.0">'
+            f'<real name="in" val="{numeric_value}"/>'
+            "</obj>"
+        ).encode("utf-8")
+        obj_value_body = (
+            '<obj xmlns="http://obix.org/ns/schema/1.0">'
+            f'<real name="value" val="{numeric_value}"/>'
+            "</obj>"
+        ).encode("utf-8")
         text_body = str(numeric_value).encode("utf-8")
         form_body = urllib.parse.urlencode({"value": str(numeric_value)}).encode("utf-8")
+        form_arg_body = urllib.parse.urlencode({"arg": str(numeric_value)}).encode("utf-8")
+        form_in_body = urllib.parse.urlencode({"in": str(numeric_value)}).encode("utf-8")
+        form_val_body = urllib.parse.urlencode({"val": str(numeric_value)}).encode("utf-8")
 
         attempts: list[tuple[str, Mapping[str, str], bytes, str]] = [
             (
@@ -426,6 +445,42 @@ class NiagaraClient:
             (
                 "POST",
                 {
+                    "Content-Type": "application/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                xml_body_no_ns,
+                "post_xml_application_no_ns",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "text/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                obj_arg_body,
+                "post_obj_arg_text_xml",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "text/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                obj_in_body,
+                "post_obj_in_text_xml",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "text/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                obj_value_body,
+                "post_obj_value_text_xml",
+            ),
+            (
+                "POST",
+                {
                     "Content-Type": "text/plain; charset=utf-8",
                     "Accept": "*/*",
                 },
@@ -440,6 +495,33 @@ class NiagaraClient:
                 },
                 form_body,
                 "post_form_value",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "*/*",
+                },
+                form_arg_body,
+                "post_form_arg",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "*/*",
+                },
+                form_in_body,
+                "post_form_in",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "*/*",
+                },
+                form_val_body,
+                "post_form_val",
             ),
         ]
 
