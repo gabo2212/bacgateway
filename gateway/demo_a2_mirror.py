@@ -327,8 +327,11 @@ class MirrorService:
                     candidates.extend(
                         [
                             f"{root}/writeValue",
+                            f"{root}/proxyExt/writeValue",
                             f"{root}/in10",
                             f"{root}/in16",
+                            f"{root}/proxyExt/in10",
+                            f"{root}/proxyExt/in16",
                         ]
                     )
                     break
@@ -668,22 +671,43 @@ class MirrorService:
         requested_value: float,
     ) -> tuple[float | None, str | None]:
         ord_out = self.ord_out_for_point(point)
+        read_paths = [ord_out]
+        for suffix in ("/set", "/out"):
+            if ord_out.endswith(suffix):
+                root = ord_out[: -len(suffix)]
+                read_paths.extend(
+                    [
+                        f"{root}/writeValue",
+                        f"{root}/proxyExt/writeValue",
+                        f"{root}/in10",
+                        f"{root}/in16",
+                    ]
+                )
+                break
+        read_paths = list(dict.fromkeys(read_paths))
         tolerance = 0.11
         last_observed: float | None = None
         last_error: str | None = None
 
-        for _attempt in range(2):
-            try:
-                real = await asyncio.to_thread(self.client.read_real, ord_out)
-                last_observed = real.value
-                if abs(real.value - requested_value) <= tolerance:
-                    return real.value, None
+        for _attempt in range(10):
+            observed: list[str] = []
+            for read_path in read_paths:
+                try:
+                    real = await asyncio.to_thread(self.client.read_real, read_path)
+                    last_observed = real.value
+                    observed.append(f"{read_path}={real.value}")
+                    if abs(real.value - requested_value) <= tolerance:
+                        return real.value, None
+                except Exception as exc:  # noqa: BLE001 - keep write flow resilient
+                    observed.append(f"{read_path}=error:{exc}")
+            if observed:
                 last_error = (
-                    f"Write not applied (requested={requested_value}, readback={real.value})"
+                    "Write not applied yet "
+                    f"(requested={requested_value}; observed={', '.join(observed)})"
                 )
-            except Exception as exc:  # noqa: BLE001 - keep write flow resilient
-                last_error = f"Write readback failed: {exc}"
-            await asyncio.sleep(0.2)
+            else:
+                last_error = "Write readback failed (no readable paths)"
+            await asyncio.sleep(0.5)
 
         if last_error is None:
             last_error = "Write confirmation failed"

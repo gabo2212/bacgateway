@@ -396,7 +396,14 @@ class NiagaraClient:
             '<real xmlns="http://obix.org/ns/schema/1.0" '
             f'val="{numeric_value}"/>'
         ).encode("utf-8")
+        xml_body_status = (
+            '<real xmlns="http://obix.org/ns/schema/1.0" '
+            f'val="{numeric_value}" status="ok"/>'
+        ).encode("utf-8")
         xml_body_no_ns = f'<real val="{numeric_value}"/>'.encode("utf-8")
+        xml_body_no_ns_status = (
+            f'<real val="{numeric_value}" status="ok"/>'
+        ).encode("utf-8")
         obj_arg_body = (
             '<obj xmlns="http://obix.org/ns/schema/1.0">'
             f'<real name="arg" val="{numeric_value}"/>'
@@ -410,6 +417,11 @@ class NiagaraClient:
         obj_value_body = (
             '<obj xmlns="http://obix.org/ns/schema/1.0">'
             f'<real name="value" val="{numeric_value}"/>'
+            "</obj>"
+        ).encode("utf-8")
+        obj_status_value_body = (
+            '<obj xmlns="http://obix.org/ns/schema/1.0">'
+            f'<real name="value" val="{numeric_value}" status="ok"/>'
             "</obj>"
         ).encode("utf-8")
         text_body = str(numeric_value).encode("utf-8")
@@ -440,6 +452,15 @@ class NiagaraClient:
             (
                 "POST",
                 {
+                    "Content-Type": "application/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                xml_body_status,
+                "post_xml_application_status",
+            ),
+            (
+                "POST",
+                {
                     "Content-Type": "text/xml; charset=utf-8",
                     "Accept": "application/xml,text/xml,*/*",
                 },
@@ -449,11 +470,29 @@ class NiagaraClient:
             (
                 "POST",
                 {
+                    "Content-Type": "text/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                xml_body_status,
+                "post_xml_text_status",
+            ),
+            (
+                "POST",
+                {
                     "Content-Type": "application/xml; charset=utf-8",
                     "Accept": "application/xml,text/xml,*/*",
                 },
                 xml_body_no_ns,
                 "post_xml_application_no_ns",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "application/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                xml_body_no_ns_status,
+                "post_xml_application_no_ns_status",
             ),
             (
                 "POST",
@@ -481,6 +520,15 @@ class NiagaraClient:
                 },
                 obj_value_body,
                 "post_obj_value_text_xml",
+            ),
+            (
+                "POST",
+                {
+                    "Content-Type": "text/xml; charset=utf-8",
+                    "Accept": "application/xml,text/xml,*/*",
+                },
+                obj_status_value_body,
+                "post_obj_status_value_text_xml",
             ),
             (
                 "POST",
