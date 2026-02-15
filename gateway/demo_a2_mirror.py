@@ -596,17 +596,47 @@ class MirrorService:
 
         self._last_write_mono[point] = now
         if result.ok:
-            self._good_values[point] = value
-            self.object_for_point(point).presentValue = value
-            self.state.update_point(point, value)
+            confirmed_value, confirm_error = await self._confirm_write_applied(point, value)
+            if confirm_error is not None:
+                logger.warning(
+                    "Niagara write unconfirmed point=%s requested=%s: %s",
+                    point,
+                    value,
+                    confirm_error,
+                )
+                self._revert_point(point, previous_value)
+                self.state.set_last_write(
+                    point=point,
+                    value=value,
+                    ok=False,
+                    status=result.status,
+                    error=confirm_error,
+                )
+                self.state.mark_error(confirm_error, self.client.login_ok)
+                return WriteOutcome(
+                    ok=False,
+                    error_code="communicationFailure",
+                    message=confirm_error,
+                    status=result.status,
+                )
+
+            applied_value = confirmed_value if confirmed_value is not None else value
+            self._good_values[point] = applied_value
+            self.object_for_point(point).presentValue = applied_value
+            self.state.update_point(point, applied_value)
             self.state.set_last_write(
                 point=point,
-                value=value,
+                value=applied_value,
                 ok=True,
                 status=result.status,
                 error=None,
             )
-            logger.info("Niagara write ok point=%s value=%s status=%s", point, value, result.status)
+            logger.info(
+                "Niagara write ok point=%s value=%s status=%s",
+                point,
+                applied_value,
+                result.status,
+            )
             return WriteOutcome(ok=True, error_code=None, message=None, status=result.status)
 
         error = result.error or f"Niagara write failed status={result.status}"
@@ -626,6 +656,33 @@ class MirrorService:
             message=error,
             status=result.status,
         )
+
+    async def _confirm_write_applied(
+        self,
+        point: PointName,
+        requested_value: float,
+    ) -> tuple[float | None, str | None]:
+        ord_out = self.ord_out_for_point(point)
+        tolerance = 0.11
+        last_observed: float | None = None
+        last_error: str | None = None
+
+        for _attempt in range(2):
+            try:
+                real = await asyncio.to_thread(self.client.read_real, ord_out)
+                last_observed = real.value
+                if abs(real.value - requested_value) <= tolerance:
+                    return real.value, None
+                last_error = (
+                    f"Write not applied (requested={requested_value}, readback={real.value})"
+                )
+            except Exception as exc:  # noqa: BLE001 - keep write flow resilient
+                last_error = f"Write readback failed: {exc}"
+            await asyncio.sleep(0.2)
+
+        if last_error is None:
+            last_error = "Write confirmation failed"
+        return last_observed, last_error
 
     def _revert_point(self, point: PointName, value: float | None) -> None:
         if value is None:
