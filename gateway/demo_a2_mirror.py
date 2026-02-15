@@ -313,31 +313,31 @@ class MirrorService:
             else self.cfg.ord.occ_cool_sp_out
         )
 
-    def _write_path_candidates(self, point: PointName) -> list[str]:
+    def _write_path_candidates(self, point: PointName, value: float) -> list[str]:
         primary_set = self.ord_set_for_point(point)
         point_out = self.ord_out_for_point(point)
-        candidates: list[str] = [primary_set]
+        value_text = f"{float(value)}"
+        candidates: list[str] = []
 
-        # Niagara writable proxy points are often exposed via writeValue or command
-        # priority slots (in10/in16) rather than /set.
+        # Try explicit action invocation syntax first for action slots.
         for base_path in (primary_set, point_out):
             for suffix in ("/set", "/out"):
                 if base_path.endswith(suffix):
                     root = base_path[: -len(suffix)]
                     candidates.extend(
                         [
-                            f"{root}/override",
-                            f"{root}/emergencyOverride",
+                            f"{root}/set({value_text})",
+                            f"{root}/override({value_text})",
+                            f"{root}/emergencyOverride({value_text})",
                             f"{root}/writeValue",
                             f"{root}/proxyExt/writeValue",
                             f"{root}/in10",
                             f"{root}/in16",
-                            f"{root}/proxyExt/in10",
-                            f"{root}/proxyExt/in16",
+                            f"{root}/out",
                         ]
                     )
                     break
-
+        candidates.append(primary_set)
         candidates.append(point_out)
 
         deduped: list[str] = []
@@ -577,35 +577,28 @@ class MirrorService:
         result: WriteResult | None = None
         path_errors: list[str] = []
         used_paths: list[str] = []
-        for ord_path in self._write_path_candidates(point):
-            per_path_attempts = [ord_path]
-            path_l = ord_path.lower()
-            if path_l.endswith("/set") or path_l.endswith("/override") or path_l.endswith("/emergencyoverride"):
-                per_path_attempts.extend(
-                    [
-                        f"{ord_path}?actionArg={value}",
-                        f"{ord_path}?arg={value}",
-                        f"{ord_path}?value={value}",
-                        f"{ord_path}?actionArg={value}%20{{overr}}",
-                    ]
-                )
-
-            for path_try in per_path_attempts:
-                try:
-                    attempt = await asyncio.to_thread(self.client.write_real, path_try, value)
-                except Exception as exc:  # noqa: BLE001 - keep service alive
-                    attempt = WriteResult(
-                        ok=False,
-                        status=None,
-                        error=f"raised: {exc}",
-                        response_body=None,
+        for ord_path in self._write_path_candidates(point, value):
+            try:
+                if ord_path.endswith(")") and "(" in ord_path:
+                    attempt = await asyncio.to_thread(
+                        self.client.invoke_action_ord,
+                        ord_path,
                     )
-                if attempt.ok:
-                    result = attempt
-                    used_paths.append(path_try)
-                    continue
-                err = attempt.error or f"status={attempt.status}"
-                path_errors.append(f"{path_try}: {err}")
+                else:
+                    attempt = await asyncio.to_thread(self.client.write_real, ord_path, value)
+            except Exception as exc:  # noqa: BLE001 - keep service alive
+                attempt = WriteResult(
+                    ok=False,
+                    status=None,
+                    error=f"raised: {exc}",
+                    response_body=None,
+                )
+            if attempt.ok:
+                result = attempt
+                used_paths.append(ord_path)
+                continue
+            err = attempt.error or f"status={attempt.status}"
+            path_errors.append(f"{ord_path}: {err}")
 
         if result is None:
             combined_error = "Niagara write failed on all candidate paths"

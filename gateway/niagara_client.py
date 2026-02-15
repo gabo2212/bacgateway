@@ -798,6 +798,64 @@ class NiagaraClient:
             response_body=last_response.body,
         )
 
+    def invoke_action_ord(self, ord_expression: str, ensure_auth: bool = True) -> WriteResult:
+        if ensure_auth:
+            self.ensure_login(ord_expression)
+
+        headers = {"Accept": "application/xml,text/xml,*/*"}
+        post_response = self._request_with_reauth(
+            method="POST",
+            path="/ord",
+            ord_query=ord_expression,
+            data=b"",
+            headers=headers,
+            probe_ord_path=self._probe_ord_path or ord_expression,
+        )
+        logger.info(
+            "niagara_action_invoke ord=%s method=POST status=%s",
+            ord_expression,
+            post_response.status,
+        )
+        if 200 <= post_response.status < 300 and not self._needs_login(post_response):
+            return WriteResult(
+                ok=True,
+                status=post_response.status,
+                error=None,
+                response_body=post_response.body,
+            )
+
+        get_response = self._request_with_reauth(
+            method="GET",
+            path="/ord",
+            ord_query=ord_expression,
+            data=None,
+            headers=headers,
+            probe_ord_path=self._probe_ord_path or ord_expression,
+        )
+        logger.info(
+            "niagara_action_invoke ord=%s method=GET status=%s",
+            ord_expression,
+            get_response.status,
+        )
+        if 200 <= get_response.status < 300 and not self._needs_login(get_response):
+            return WriteResult(
+                ok=True,
+                status=get_response.status,
+                error=None,
+                response_body=get_response.body,
+            )
+
+        body_snippet = self._sanitize_body_snippet(get_response.body or post_response.body)
+        return WriteResult(
+            ok=False,
+            status=get_response.status,
+            error=(
+                "Niagara action invoke failed "
+                f"(post={post_response.status}, get={get_response.status}, body={body_snippet!r})"
+            ),
+            response_body=get_response.body or post_response.body,
+        )
+
     def _ensure_login_locked(self, probe_ord_path: str | None) -> None:
         if self._login_ok:
             return
