@@ -574,7 +574,7 @@ class MirrorService:
             previous_value = self.state.current_point(point)
         result: WriteResult | None = None
         path_errors: list[str] = []
-        used_path: str | None = None
+        used_paths: list[str] = []
         for ord_path in self._write_path_candidates(point):
             try:
                 attempt = await asyncio.to_thread(self.client.write_real, ord_path, value)
@@ -587,8 +587,8 @@ class MirrorService:
                 )
             if attempt.ok:
                 result = attempt
-                used_path = ord_path
-                break
+                used_paths.append(ord_path)
+                continue
             err = attempt.error or f"status={attempt.status}"
             path_errors.append(f"{ord_path}: {err}")
 
@@ -613,11 +613,18 @@ class MirrorService:
                 status=None,
             )
 
-        if used_path and used_path != ord_set:
+        if used_paths:
             logger.info(
-                "Niagara write used fallback path point=%s path=%s requested=%s",
+                "Niagara write accepted on candidate paths point=%s paths=%s requested=%s",
                 point,
-                used_path,
+                ",".join(used_paths),
+                value,
+            )
+        if used_paths and (len(used_paths) > 1 or used_paths[0] != ord_set):
+            logger.info(
+                "Niagara write used fallback candidate path(s) point=%s paths=%s requested=%s",
+                point,
+                ",".join(used_paths),
                 value,
             )
 
@@ -681,6 +688,8 @@ class MirrorService:
                         f"{root}/proxyExt/writeValue",
                         f"{root}/in10",
                         f"{root}/in16",
+                        f"{root}/proxyExt/in10",
+                        f"{root}/proxyExt/in16",
                     ]
                 )
                 break
