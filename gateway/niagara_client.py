@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 _LOGIN_MARKERS = (
     "<title>login",
     "name=\"username\"",
+    "name='username'",
+    "id=\"scheme\"",
+    "id='scheme'",
+    "cookieDigest",
     "j_security_check",
     "/login",
     "niagara login",
@@ -1048,6 +1052,9 @@ class NiagaraClient:
 
     def _looks_like_login_html(self, body: str) -> bool:
         body_l = body.lower()
+        # Niagara AX login pages often expose hidden scheme input, including single-quoted attrs.
+        if detect_login_scheme(body):
+            return True
         return any(marker in body_l for marker in _LOGIN_MARKERS)
 
     def _is_obix_body(self, body: str) -> bool:
