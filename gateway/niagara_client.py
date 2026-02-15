@@ -463,6 +463,12 @@ class NiagaraClient:
         form_value_overr_body = urllib.parse.urlencode(
             {"value": f"{numeric_value} {{overr}}"}
         ).encode("utf-8")
+        form_action_arg_body = urllib.parse.urlencode(
+            {"actionArg": str(numeric_value)}
+        ).encode("utf-8")
+        form_action_arg_overr_body = urllib.parse.urlencode(
+            {"actionArg": f"{numeric_value} {{overr}}"}
+        ).encode("utf-8")
 
         attempts: list[tuple[str, Mapping[str, str], bytes, str]] = [
             (
@@ -711,6 +717,24 @@ class NiagaraClient:
                     },
                     text_body_overridden,
                     "post_text_overridden",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "*/*",
+                    },
+                    form_action_arg_body,
+                    "post_form_action_arg",
+                ),
+                (
+                    "POST",
+                    {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "*/*",
+                    },
+                    form_action_arg_overr_body,
+                    "post_form_action_arg_overr",
                 ),
                 (
                     "POST",

@@ -326,6 +326,8 @@ class MirrorService:
                     root = base_path[: -len(suffix)]
                     candidates.extend(
                         [
+                            f"{root}/override",
+                            f"{root}/emergencyOverride",
                             f"{root}/writeValue",
                             f"{root}/proxyExt/writeValue",
                             f"{root}/in10",
@@ -576,21 +578,34 @@ class MirrorService:
         path_errors: list[str] = []
         used_paths: list[str] = []
         for ord_path in self._write_path_candidates(point):
-            try:
-                attempt = await asyncio.to_thread(self.client.write_real, ord_path, value)
-            except Exception as exc:  # noqa: BLE001 - keep service alive
-                attempt = WriteResult(
-                    ok=False,
-                    status=None,
-                    error=f"raised: {exc}",
-                    response_body=None,
+            per_path_attempts = [ord_path]
+            path_l = ord_path.lower()
+            if path_l.endswith("/set") or path_l.endswith("/override") or path_l.endswith("/emergencyoverride"):
+                per_path_attempts.extend(
+                    [
+                        f"{ord_path}?actionArg={value}",
+                        f"{ord_path}?arg={value}",
+                        f"{ord_path}?value={value}",
+                        f"{ord_path}?actionArg={value}%20{{overr}}",
+                    ]
                 )
-            if attempt.ok:
-                result = attempt
-                used_paths.append(ord_path)
-                continue
-            err = attempt.error or f"status={attempt.status}"
-            path_errors.append(f"{ord_path}: {err}")
+
+            for path_try in per_path_attempts:
+                try:
+                    attempt = await asyncio.to_thread(self.client.write_real, path_try, value)
+                except Exception as exc:  # noqa: BLE001 - keep service alive
+                    attempt = WriteResult(
+                        ok=False,
+                        status=None,
+                        error=f"raised: {exc}",
+                        response_body=None,
+                    )
+                if attempt.ok:
+                    result = attempt
+                    used_paths.append(path_try)
+                    continue
+                err = attempt.error or f"status={attempt.status}"
+                path_errors.append(f"{path_try}: {err}")
 
         if result is None:
             combined_error = "Niagara write failed on all candidate paths"
