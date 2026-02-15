@@ -329,16 +329,20 @@ class MirrorService:
                             f"{root}/set({value_text})",
                             f"{root}/override({value_text})",
                             f"{root}/emergencyOverride({value_text})",
+                            f"{root}/set",
+                            f"{root}/override",
+                            f"{root}/emergencyOverride",
                             f"{root}/writeValue",
                             f"{root}/proxyExt/writeValue",
+                            f"{root}/in8",
                             f"{root}/in10",
                             f"{root}/in16",
-                            f"{root}/out",
                         ]
                     )
+                    for idx in range(1, 17):
+                        candidates.append(f"{root}/in{idx}")
                     break
         candidates.append(primary_set)
-        candidates.append(point_out)
 
         deduped: list[str] = []
         seen: set[str] = set()
@@ -576,7 +580,7 @@ class MirrorService:
             previous_value = self.state.current_point(point)
         result: WriteResult | None = None
         path_errors: list[str] = []
-        used_paths: list[str] = []
+        confirmed_path: str | None = None
         for ord_path in self._write_path_candidates(point, value):
             try:
                 if ord_path.endswith(")") and "(" in ord_path:
@@ -594,96 +598,69 @@ class MirrorService:
                     response_body=None,
                 )
             if attempt.ok:
-                result = attempt
-                used_paths.append(ord_path)
+                confirmed_value, confirm_error = await self._confirm_write_applied(
+                    point,
+                    value,
+                    attempts=3,
+                    sleep_sec=0.5,
+                )
+                if confirm_error is None:
+                    result = attempt
+                    confirmed_path = ord_path
+                    applied_value = confirmed_value if confirmed_value is not None else value
+                    self._last_write_mono[point] = now
+                    self._good_values[point] = applied_value
+                    self.object_for_point(point).presentValue = applied_value
+                    self.state.update_point(point, applied_value)
+                    self.state.set_last_write(
+                        point=point,
+                        value=applied_value,
+                        ok=True,
+                        status=attempt.status,
+                        error=None,
+                    )
+                    logger.info(
+                        "Niagara write ok point=%s value=%s status=%s path=%s",
+                        point,
+                        applied_value,
+                        attempt.status,
+                        confirmed_path,
+                    )
+                    return WriteOutcome(ok=True, error_code=None, message=None, status=attempt.status)
+                err = (
+                    f"accepted-but-unconfirmed on {ord_path}: {confirm_error}"
+                )
+                path_errors.append(err)
                 continue
             err = attempt.error or f"status={attempt.status}"
             path_errors.append(f"{ord_path}: {err}")
 
-        if result is None:
-            combined_error = "Niagara write failed on all candidate paths"
-            if path_errors:
-                combined_error = f"{combined_error} ({'; '.join(path_errors)})"
-            logger.warning("Niagara write failed point=%s value=%s: %s", point, value, combined_error)
-            self._revert_point(point, previous_value)
-            self.state.set_last_write(
-                point=point,
-                value=value,
-                ok=False,
-                status=None,
-                error=combined_error,
-            )
-            self.state.mark_error(combined_error, self.client.login_ok)
-            return WriteOutcome(
-                ok=False,
-                error_code="communicationFailure",
-                message=combined_error,
-                status=None,
-            )
-
-        if used_paths:
-            logger.info(
-                "Niagara write accepted on candidate paths point=%s paths=%s requested=%s",
-                point,
-                ",".join(used_paths),
-                value,
-            )
-        if used_paths and (len(used_paths) > 1 or used_paths[0] != ord_set):
-            logger.info(
-                "Niagara write used fallback candidate path(s) point=%s paths=%s requested=%s",
-                point,
-                ",".join(used_paths),
-                value,
-            )
-
-        self._last_write_mono[point] = now
-        confirmed_value, confirm_error = await self._confirm_write_applied(point, value)
-        if confirm_error is not None:
-            logger.warning(
-                "Niagara write unconfirmed point=%s requested=%s: %s",
-                point,
-                value,
-                confirm_error,
-            )
-            self._revert_point(point, previous_value)
-            self.state.set_last_write(
-                point=point,
-                value=value,
-                ok=False,
-                status=result.status,
-                error=confirm_error,
-            )
-            self.state.mark_error(confirm_error, self.client.login_ok)
-            return WriteOutcome(
-                ok=False,
-                error_code="communicationFailure",
-                message=confirm_error,
-                status=result.status,
-            )
-
-        applied_value = confirmed_value if confirmed_value is not None else value
-        self._good_values[point] = applied_value
-        self.object_for_point(point).presentValue = applied_value
-        self.state.update_point(point, applied_value)
+        combined_error = "Niagara write failed or remained unapplied on all candidate paths"
+        if path_errors:
+            combined_error = f"{combined_error} ({'; '.join(path_errors)})"
+        logger.warning("Niagara write failed point=%s value=%s: %s", point, value, combined_error)
+        self._revert_point(point, previous_value)
         self.state.set_last_write(
             point=point,
-            value=applied_value,
-            ok=True,
-            status=result.status,
-            error=None,
+            value=value,
+            ok=False,
+            status=None,
+            error=combined_error,
         )
-        logger.info(
-            "Niagara write ok point=%s value=%s status=%s",
-            point,
-            applied_value,
-            result.status,
+        self.state.mark_error(combined_error, self.client.login_ok)
+        return WriteOutcome(
+            ok=False,
+            error_code="communicationFailure",
+            message=combined_error,
+            status=None,
         )
-        return WriteOutcome(ok=True, error_code=None, message=None, status=result.status)
 
     async def _confirm_write_applied(
         self,
         point: PointName,
         requested_value: float,
+        attempts: int = 10,
+        sleep_sec: float = 0.5,
     ) -> tuple[float | None, str | None]:
         ord_out = self.ord_out_for_point(point)
         read_paths = [ord_out]
@@ -706,7 +683,7 @@ class MirrorService:
         last_observed: float | None = None
         last_error: str | None = None
 
-        for _attempt in range(10):
+        for _attempt in range(max(1, attempts)):
             observed: list[str] = []
             for read_path in read_paths:
                 try:
@@ -724,7 +701,7 @@ class MirrorService:
                 )
             else:
                 last_error = "Write readback failed (no readable paths)"
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(max(0.05, sleep_sec))
 
         if last_error is None:
             last_error = "Write confirmation failed"
@@ -762,7 +739,7 @@ class MirrorService:
             self._loop,
         )
         try:
-            return future.result(timeout=max(5.0, self.cfg.niagara.timeout_sec + 2.0))
+            return future.result(timeout=max(30.0, self.cfg.niagara.timeout_sec + 2.0))
         except Exception as exc:  # noqa: BLE001 - HTTP layer should not crash service
             logger.warning("HTTP write failed for %s: %s", point, exc)
             return WriteOutcome(
