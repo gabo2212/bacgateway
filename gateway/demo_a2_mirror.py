@@ -601,7 +601,8 @@ class MirrorService:
                 confirmed_value, confirm_error = await self._confirm_write_applied(
                     point,
                     value,
-                    attempts=3,
+                    focus_path=ord_path,
+                    attempts=12,
                     sleep_sec=0.5,
                 )
                 if confirm_error is None:
@@ -659,11 +660,14 @@ class MirrorService:
         self,
         point: PointName,
         requested_value: float,
+        focus_path: str | None = None,
         attempts: int = 10,
         sleep_sec: float = 0.5,
     ) -> tuple[float | None, str | None]:
         ord_out = self.ord_out_for_point(point)
         read_paths = [ord_out]
+        if focus_path:
+            read_paths.insert(0, focus_path)
         for suffix in ("/set", "/out"):
             if ord_out.endswith(suffix):
                 root = ord_out[: -len(suffix)]
@@ -671,10 +675,25 @@ class MirrorService:
                     [
                         f"{root}/writeValue",
                         f"{root}/proxyExt/writeValue",
+                        f"{root}/in1",
+                        f"{root}/in2",
+                        f"{root}/in3",
+                        f"{root}/in4",
+                        f"{root}/in5",
+                        f"{root}/in6",
+                        f"{root}/in7",
+                        f"{root}/in8",
+                        f"{root}/in9",
                         f"{root}/in10",
+                        f"{root}/in11",
+                        f"{root}/in12",
+                        f"{root}/in13",
+                        f"{root}/in14",
+                        f"{root}/in15",
                         f"{root}/in16",
                         f"{root}/proxyExt/in10",
                         f"{root}/proxyExt/in16",
+                        f"{root}/proxyExt/in8",
                     ]
                 )
                 break
