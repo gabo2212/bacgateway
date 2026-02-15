@@ -306,6 +306,13 @@ class MirrorService:
             else self.cfg.ord.occ_cool_sp_set
         )
 
+    def ord_out_for_point(self, point: PointName) -> str:
+        return (
+            self.cfg.ord.occ_heat_sp_out
+            if point == "heat"
+            else self.cfg.ord.occ_cool_sp_out
+        )
+
     def object_for_point(self, point: PointName) -> AnalogValueObject:
         obj = self._heat_obj if point == "heat" else self._cool_obj
         if obj is None:  # pragma: no cover - defensive guard
@@ -547,6 +554,45 @@ class MirrorService:
             )
             self.state.mark_error(error, self.client.login_ok)
             return WriteOutcome(ok=False, error_code="communicationFailure", message=error, status=None)
+
+        if not result.ok:
+            fallback_ord = self.ord_out_for_point(point)
+            if fallback_ord != ord_set:
+                logger.info(
+                    "Niagara write retry using out-path fallback point=%s primary=%s fallback=%s",
+                    point,
+                    ord_set,
+                    fallback_ord,
+                )
+                try:
+                    fallback_result = await asyncio.to_thread(
+                        self.client.write_real,
+                        fallback_ord,
+                        value,
+                    )
+                except Exception as exc:  # noqa: BLE001 - keep service alive
+                    fallback_result = WriteResult(
+                        ok=False,
+                        status=None,
+                        error=f"Niagara out-path fallback raised: {exc}",
+                        response_body=None,
+                    )
+                if fallback_result.ok:
+                    result = fallback_result
+                else:
+                    primary_error = result.error or f"primary status={result.status}"
+                    fallback_error = (
+                        fallback_result.error or f"fallback status={fallback_result.status}"
+                    )
+                    result = WriteResult(
+                        ok=False,
+                        status=fallback_result.status or result.status,
+                        error=(
+                            "Niagara write failed on set and out "
+                            f"(set: {primary_error}; out: {fallback_error})"
+                        ),
+                        response_body=fallback_result.response_body or result.response_body,
+                    )
 
         self._last_write_mono[point] = now
         if result.ok:
