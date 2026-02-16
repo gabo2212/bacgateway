@@ -327,8 +327,11 @@ class MirrorService:
                     candidates.extend(
                         [
                             f"{root}/set({value_text})",
+                            f"{root}/set?actionArg={value_text}",
                             f"{root}/override({value_text})",
+                            f"{root}/override?actionArg={value_text}",
                             f"{root}/emergencyOverride({value_text})",
+                            f"{root}/emergencyOverride?actionArg={value_text}",
                             f"{root}/set",
                             f"{root}/override",
                             f"{root}/emergencyOverride",
@@ -583,7 +586,14 @@ class MirrorService:
         confirmed_path: str | None = None
         for ord_path in self._write_path_candidates(point, value):
             try:
-                if ord_path.endswith(")") and "(" in ord_path:
+                path_l = ord_path.lower()
+                if (
+                    (ord_path.endswith(")") and "(" in ord_path)
+                    or ("?actionarg=" in path_l)
+                    or path_l.endswith("/set")
+                    or path_l.endswith("/override")
+                    or path_l.endswith("/emergencyoverride")
+                ):
                     attempt = await asyncio.to_thread(
                         self.client.invoke_action_ord,
                         ord_path,

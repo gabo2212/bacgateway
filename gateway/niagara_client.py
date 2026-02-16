@@ -1236,7 +1236,9 @@ class NiagaraClient:
         base = f"{self.scheme}://{self.host}{path}"
         if ord_query is None:
             return base
-        encoded_query = urllib.parse.quote(ord_query, safe=":/|$@[]!()*+,;=-._~")
+        # Allow ORD expressions to carry embedded action args like "?actionArg=..."
+        # without escaping those separators into literal path characters.
+        encoded_query = urllib.parse.quote(ord_query, safe=":/|$@[]!()*+,;=-._~?&{}")
         return f"{base}?{encoded_query}"
 
     def _probe_authenticated(self, ord_path: str | None) -> bool:
