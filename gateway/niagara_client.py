@@ -864,10 +864,86 @@ class NiagaraClient:
             "Accept": "application/xml,text/xml,*/*",
         }
         empty_headers = {"Accept": "application/xml,text/xml,*/*"}
-        attempts: list[tuple[str, Mapping[str, str], bytes, str]] = []
+        attempts: list[tuple[str, str, Mapping[str, str], bytes, str]] = []
 
-        if numeric_arg is not None:
-            numeric_value = float(numeric_arg)
+        action_base_ord, action_name, action_arg_hint = self._split_action_ord(ord_expression)
+        resolved_arg = numeric_arg
+        if resolved_arg is None and action_arg_hint is not None:
+            try:
+                resolved_arg = float(action_arg_hint.strip())
+            except ValueError:
+                resolved_arg = None
+
+        if action_name:
+            if resolved_arg is None:
+                attempts.append(
+                    (
+                        action_base_ord,
+                        "POST",
+                        form_headers,
+                        urllib.parse.urlencode({"action": action_name}).encode("utf-8"),
+                        "post_station_form_action_only",
+                    )
+                )
+            else:
+                numeric_value = float(resolved_arg)
+                numeric_text = str(numeric_value)
+                bog_numeric_override = (
+                    '<bog version="1.0">\n'
+                    '<p m="c=control" t="c:NumericOverride">\n'
+                    f' <p n="value" v="{numeric_text}"/>\n'
+                    "</p>\n"
+                    "</bog>\n"
+                )
+                bog_wire = f"o:bog {len(bog_numeric_override.encode('utf-8'))}[{bog_numeric_override}]"
+                attempts.extend(
+                    [
+                        (
+                            action_base_ord,
+                            "POST",
+                            form_headers,
+                            urllib.parse.urlencode({"action": action_name, "arg": bog_wire}).encode(
+                                "utf-8"
+                            ),
+                            "post_station_form_action_arg_bog_wire",
+                        ),
+                        (
+                            action_base_ord,
+                            "POST",
+                            form_headers,
+                            urllib.parse.urlencode({"action": action_name, "arg": bog_numeric_override}).encode(
+                                "utf-8"
+                            ),
+                            "post_station_form_action_arg_bog_xml",
+                        ),
+                        (
+                            action_base_ord,
+                            "POST",
+                            form_headers,
+                            urllib.parse.urlencode({"action": action_name, "arg": numeric_text}).encode("utf-8"),
+                            "post_station_form_action_arg_numeric",
+                        ),
+                        (
+                            action_base_ord,
+                            "POST",
+                            form_headers,
+                            urllib.parse.urlencode({"action": action_name, "actionArg": numeric_text}).encode(
+                                "utf-8"
+                            ),
+                            "post_station_form_action_actionArg",
+                        ),
+                        (
+                            action_base_ord,
+                            "POST",
+                            form_headers,
+                            urllib.parse.urlencode({"action": action_name, "value": numeric_text}).encode("utf-8"),
+                            "post_station_form_action_value",
+                        ),
+                    ]
+                )
+
+        if resolved_arg is not None:
+            numeric_value = float(resolved_arg)
             numeric_text = str(numeric_value)
             bog_numeric_override = (
                 '<bog version="1.0">\n'
@@ -885,36 +961,42 @@ class NiagaraClient:
             attempts.extend(
                 [
                     (
+                        ord_expression,
                         "POST",
                         form_headers,
                         urllib.parse.urlencode({"actionArg": numeric_text}).encode("utf-8"),
                         "post_form_actionArg",
                     ),
                     (
+                        ord_expression,
                         "POST",
                         form_headers,
                         urllib.parse.urlencode({"arg": numeric_text}).encode("utf-8"),
                         "post_form_arg",
                     ),
                     (
+                        ord_expression,
                         "POST",
                         form_headers,
                         urllib.parse.urlencode({"value": numeric_text}).encode("utf-8"),
                         "post_form_value",
                     ),
                     (
+                        ord_expression,
                         "POST",
                         form_headers,
                         urllib.parse.urlencode({"arg": bog_numeric_override}).encode("utf-8"),
                         "post_form_arg_bog_numeric_override",
                     ),
                     (
+                        ord_expression,
                         "POST",
                         xml_headers,
                         bog_numeric_override.encode("utf-8"),
                         "post_text_xml_bog_numeric_override",
                     ),
                     (
+                        ord_expression,
                         "POST",
                         xml_headers,
                         obix_obj_arg,
@@ -923,26 +1005,27 @@ class NiagaraClient:
                 ]
             )
 
-        attempts.append(("POST", empty_headers, b"", "post_empty"))
+        attempts.append((ord_expression, "POST", empty_headers, b"", "post_empty"))
 
         attempt_statuses: list[str] = []
         last_response: _Response | None = None
-        for method, headers, body, label in attempts:
+        for ord_query, method, headers, body, label in attempts:
             response = self._request_with_reauth(
                 method=method,
                 path="/ord",
-                ord_query=ord_expression,
+                ord_query=ord_query,
                 data=body,
                 headers=headers,
                 probe_ord_path=self._probe_ord_path or ord_expression,
             )
             last_response = response
             logger.info(
-                "niagara_action_invoke ord=%s mode=%s method=%s status=%s",
-                ord_expression,
+                "niagara_action_invoke ord=%s mode=%s method=%s status=%s action_target=%s",
+                ord_query,
                 label,
                 method,
                 response.status,
+                action_name or "-",
             )
             attempt_statuses.append(f"{label}:{response.status}")
             if (
@@ -994,6 +1077,28 @@ class NiagaraClient:
             ),
             response_body=get_response.body or last_response.body,
         )
+
+    def _split_action_ord(self, ord_expression: str) -> tuple[str, str | None, str | None]:
+        match = re.match(
+            r"^(.*?)/(set|override|emergencyOverride|execute)(?:\(([^)]*)\))?(?:\?(.*))?$",
+            ord_expression,
+            re.IGNORECASE,
+        )
+        if not match:
+            return ord_expression, None, None
+
+        base = match.group(1) or ord_expression
+        action_name = match.group(2)
+        action_arg = match.group(3)
+        query_part = match.group(4)
+        if action_arg is None and query_part:
+            parsed_qs = urllib.parse.parse_qs(query_part, keep_blank_values=True)
+            for key in ("actionArg", "arg", "value", "val", "in"):
+                values = parsed_qs.get(key)
+                if values:
+                    action_arg = values[0]
+                    break
+        return base, action_name, action_arg
 
     def _ensure_login_locked(self, probe_ord_path: str | None) -> None:
         if self._login_ok:
