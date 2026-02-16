@@ -116,6 +116,18 @@ def main() -> int:
         help="Circuit id used when --sync-prelude is set",
     )
     parser.add_argument(
+        "--circuit-step",
+        type=int,
+        default=2,
+        help="Delta applied to circuit id for each sync cycle (default: 2)",
+    )
+    parser.add_argument(
+        "--circuit-id-after-sub",
+        type=int,
+        default=None,
+        help="Starting circuit id for sync cycles sent after station-sub (default: continue from --circuit-id progression)",
+    )
+    parser.add_argument(
         "--sync-prelude",
         action="store_true",
         help="Send circuit open/stream/close syncFromMaster messages before invoke",
@@ -182,19 +194,24 @@ def main() -> int:
     msg_id = int(args.message_id)
     messages: list[str] = []
     sync_cycles = max(1, int(args.sync_cycles))
+    circuit_step = int(args.circuit_step)
 
-    def add_sync_cycles(current_msg_id: int) -> int:
+    def add_sync_cycles(current_msg_id: int, start_circuit_id: int) -> tuple[int, int]:
+        current_circuit_id = int(start_circuit_id)
         for _ in range(sync_cycles):
-            messages.append(_build_sync_open(current_msg_id, args.circuit_id, newline=newline))
+            messages.append(_build_sync_open(current_msg_id, current_circuit_id, newline=newline))
             current_msg_id += 1
-            messages.append(_build_sync_stream(current_msg_id, args.circuit_id, newline=newline))
+            messages.append(_build_sync_stream(current_msg_id, current_circuit_id, newline=newline))
             current_msg_id += 1
-            messages.append(_build_sync_close(current_msg_id, args.circuit_id, newline=newline))
+            messages.append(_build_sync_close(current_msg_id, current_circuit_id, newline=newline))
             current_msg_id += 1
-        return current_msg_id
+            current_circuit_id += circuit_step
+        return current_msg_id, current_circuit_id
+
+    circuit_id = int(args.circuit_id)
 
     if args.sync_prelude and args.sync_order == "before-sub":
-        msg_id = add_sync_cycles(msg_id)
+        msg_id, circuit_id = add_sync_cycles(msg_id, circuit_id)
     if args.station_sub:
         messages.append(
             _build_station_sub(
@@ -206,7 +223,10 @@ def main() -> int:
         )
         msg_id += 1
     if args.sync_prelude and args.sync_order == "after-sub":
-        msg_id = add_sync_cycles(msg_id)
+        after_sub_circuit = args.circuit_id_after_sub
+        if after_sub_circuit is None:
+            after_sub_circuit = circuit_id
+        msg_id, circuit_id = add_sync_cycles(msg_id, after_sub_circuit)
     messages.append(_build_station_invoke(msg_id, args.ord, args.action, args.value, newline=newline))
 
     print("# outbound fox payloads")
