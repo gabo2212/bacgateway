@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import argparse
-import json
+import csv
+import io
 import re
 import shutil
 import subprocess
@@ -74,6 +75,22 @@ def _decode_body(text: str | None) -> str | None:
 
 
 def _collect_records(tshark_bin: str, pcap_path: Path) -> list[HttpRecord]:
+    field_names = [
+        "frame.number",
+        "frame.time_epoch",
+        "tcp.stream",
+        "ip.src",
+        "ip.dst",
+        "http.request",
+        "http.request.method",
+        "http.request.full_uri",
+        "http.request.uri",
+        "http.response",
+        "http.response.code",
+        "http.content_type",
+        "http.file_data",
+        "data.data",
+    ]
     cmd = [
         tshark_bin,
         "-r",
@@ -81,40 +98,50 @@ def _collect_records(tshark_bin: str, pcap_path: Path) -> list[HttpRecord]:
         "-Y",
         "http.request || http.response",
         "-T",
-        "json",
+        "fields",
     ]
+    for field in field_names:
+        cmd.extend(["-e", field])
+    cmd.extend(
+        [
+            "-E",
+            "header=y",
+            "-E",
+            "separator=,",
+            "-E",
+            "quote=d",
+            "-E",
+            "occurrence=f",
+        ]
+    )
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or "tshark parse failed")
+    if not proc.stdout.strip():
+        return []
 
-    packets = json.loads(proc.stdout)
+    reader = csv.DictReader(io.StringIO(proc.stdout))
     records: list[HttpRecord] = []
-    for packet in packets:
-        layers = packet.get("_source", {}).get("layers", {})
-        if not isinstance(layers, dict):
-            continue
-
-        frame_s = _first_text(_lookup_field(layers, "frame.number")) or "0"
-        ts_s = _first_text(_lookup_field(layers, "frame.time_epoch")) or "0"
-        stream = _first_text(_lookup_field(layers, "tcp.stream")) or "?"
-        src = _first_text(_lookup_field(layers, "ip.src")) or "?"
-        dst = _first_text(_lookup_field(layers, "ip.dst")) or "?"
-
-        method = _first_text(_lookup_field(layers, "http.request.method"))
+    for row in reader:
+        frame_s = row.get("frame.number") or "0"
+        ts_s = row.get("frame.time_epoch") or "0"
+        stream = row.get("tcp.stream") or "?"
+        src = row.get("ip.src") or "?"
+        dst = row.get("ip.dst") or "?"
+        req_flag = (row.get("http.request") or "").strip().lower() in {"1", "true", "yes"}
+        resp_flag = (row.get("http.response") or "").strip().lower() in {"1", "true", "yes"}
+        method = (row.get("http.request.method") or "").strip() or None
         uri = (
-            _first_text(_lookup_field(layers, "http.request.full_uri"))
-            or _first_text(_lookup_field(layers, "http.request.uri"))
+            (row.get("http.request.full_uri") or "").strip()
+            or (row.get("http.request.uri") or "").strip()
+            or None
         )
-        status = _first_text(_lookup_field(layers, "http.response.code"))
-        content_type = _first_text(_lookup_field(layers, "http.content_type"))
-        body_raw = (
-            _first_text(_lookup_field(layers, "http.file_data"))
-            or _first_text(_lookup_field(layers, "data-text-lines"))
-            or _first_text(_lookup_field(layers, "data.data"))
-        )
+        status = (row.get("http.response.code") or "").strip() or None
+        content_type = (row.get("http.content_type") or "").strip() or None
+        body_raw = (row.get("http.file_data") or "").strip() or (row.get("data.data") or "").strip() or None
         body = _decode_body(body_raw)
 
-        is_request = method is not None
+        is_request = req_flag or (method is not None and not resp_flag)
         if not is_request and status is None:
             continue
 
@@ -202,17 +229,18 @@ def _print_records(
     if point_filter:
         needle = point_filter.lower()
         for stream, recs in streams.items():
-            joined = " ".join(
-                [
+            flat_parts: list[str] = []
+            for rec in recs:
+                flat_parts.extend(
+                    [
                     rec.uri or "",
                     rec.body or "",
                     rec.content_type or "",
                     rec.method or "",
                     rec.status or "",
-                ]
-                for rec in recs
-            )
-            flat = " ".join(joined).lower()
+                    ]
+                )
+            flat = " ".join(flat_parts).lower()
             if needle in flat:
                 selected_streams.append(stream)
     else:
@@ -257,6 +285,9 @@ def _print_records(
         print(f"url: {url}")
         print(f"content-type: {replay_candidate.content_type or 'application/xml'}")
         print(f"body: {_snippet(replay_candidate.body, max_body)}")
+    else:
+        print("\n# write-method summary")
+        print("No POST/PUT request found in selected streams (likely poll/read traffic only).")
 
 
 def main() -> int:
