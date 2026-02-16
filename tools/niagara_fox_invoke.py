@@ -59,22 +59,52 @@ def _send_and_recv(
     timeout: float,
     recv_window: float,
     inter_message_delay: float,
+    wait_after_sub: float,
+    wait_after_sync_stream: float,
 ) -> tuple[str, str | None, str | None]:
     send_error: str | None = None
     recv_error: str | None = None
+    chunks: list[bytes] = []
+
+    def drain_for(duration_sec: float) -> bool:
+        nonlocal recv_error
+        if duration_sec <= 0:
+            return True
+        end = time.time() + duration_sec
+        while time.time() < end:
+            remaining = max(0.01, end - time.time())
+            sock.settimeout(min(timeout, remaining))
+            try:
+                data = sock.recv(65535)
+            except TimeoutError:
+                break
+            except OSError as exc:
+                recv_error = f"recv failed: {exc}"
+                return False
+            if not data:
+                break
+            chunks.append(data)
+        return True
+
     with socket.create_connection((host, port), timeout=timeout) as sock:
         sock.settimeout(timeout)
         for idx, message in enumerate(messages, start=1):
             payload = message.encode("utf-8")
+            first_line = message.splitlines()[0].strip().lower() if message.splitlines() else ""
             try:
                 sock.sendall(payload)
             except OSError as exc:
                 send_error = f"send failed on payload {idx}: {exc}"
                 break
+            if "station sub" in first_line:
+                if not drain_for(wait_after_sub):
+                    break
+            elif "circuit stream" in first_line:
+                if not drain_for(wait_after_sync_stream):
+                    break
             time.sleep(max(0.0, inter_message_delay))
 
         end = time.time() + recv_window
-        chunks: list[bytes] = []
         while time.time() < end:
             try:
                 data = sock.recv(65535)
@@ -185,8 +215,20 @@ def main() -> int:
     parser.add_argument(
         "--inter-message-delay",
         type=float,
+        default=0.001,
+        help="Delay in seconds between payload sends (default: 0.001)",
+    )
+    parser.add_argument(
+        "--wait-after-sub",
+        type=float,
         default=0.05,
-        help="Delay in seconds between payload sends (default: 0.05)",
+        help="Seconds to receive immediately after station-sub (default: 0.05)",
+    )
+    parser.add_argument(
+        "--wait-after-sync-stream",
+        type=float,
+        default=0.02,
+        help="Seconds to receive immediately after each circuit-stream (default: 0.02)",
     )
     args = parser.parse_args()
 
@@ -244,6 +286,8 @@ def main() -> int:
         timeout=max(0.1, float(args.timeout)),
         recv_window=max(0.1, float(args.recv_window)),
         inter_message_delay=float(args.inter_message_delay),
+        wait_after_sub=max(0.0, float(args.wait_after_sub)),
+        wait_after_sync_stream=max(0.0, float(args.wait_after_sync_stream)),
     )
 
     print("# inbound response")
