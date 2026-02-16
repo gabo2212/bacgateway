@@ -332,7 +332,15 @@ class MirrorService:
                             f"{root}/in10",
                             f"{root}/in16",
                             f"{root}/writeValue",
-                            f"{root}/out",
+                            f"{root}/proxyExt/set({value_text})",
+                            f"{root}/proxyExt/set?actionArg={value_text}",
+                            f"{root}/proxyExt/override({value_text})",
+                            f"{root}/proxyExt/override?actionArg={value_text}",
+                            f"{root}/proxyExt/emergencyOverride({value_text})",
+                            f"{root}/proxyExt/emergencyOverride?actionArg={value_text}",
+                            f"{root}/proxyExt/set",
+                            f"{root}/proxyExt/override",
+                            f"{root}/proxyExt/emergencyOverride",
                             f"{root}/set({value_text})",
                             f"{root}/set?actionArg={value_text}",
                             f"{root}/override({value_text})",
@@ -623,7 +631,9 @@ class MirrorService:
                         path=ord_path,
                     )
 
-                execute_ord = await self._trigger_proxy_execute_if_applicable(ord_path)
+                execute_ord, execute_error = await self._trigger_proxy_execute_if_applicable(
+                    ord_path
+                )
                 if execute_ord is not None:
                     confirmed_value, confirm_error = await self._confirm_write_applied(
                         point,
@@ -643,6 +653,10 @@ class MirrorService:
                             path=ord_path,
                             context=f"after proxy execute {execute_ord}",
                         )
+                elif execute_error:
+                    path_errors.append(
+                        f"{ord_path}: proxy execute failed ({execute_error})"
+                    )
 
                 if self._is_deferred_write_candidate(ord_path):
                     logger.info(
@@ -779,7 +793,10 @@ class MirrorService:
                 break
         if not base:
             return []
-        candidates = [f"{base}/proxyExt/execute()", f"{base}/proxyExt/execute"]
+        if base.lower().endswith("/proxyext"):
+            candidates = [f"{base}/execute()", f"{base}/execute"]
+        else:
+            candidates = [f"{base}/proxyExt/execute()", f"{base}/proxyExt/execute"]
         deduped: list[str] = []
         seen: set[str] = set()
         for candidate in candidates:
@@ -789,7 +806,7 @@ class MirrorService:
             deduped.append(candidate)
         return deduped
 
-    async def _trigger_proxy_execute_if_applicable(self, ord_path: str) -> str | None:
+    async def _trigger_proxy_execute_if_applicable(self, ord_path: str) -> tuple[str | None, str | None]:
         path_l = ord_path.lower()
         if not (
             path_l.endswith("/proxyext/writevalue")
@@ -798,24 +815,28 @@ class MirrorService:
             or path_l.endswith("/override")
             or path_l.endswith("/emergencyoverride")
         ):
-            return None
+            return None, None
 
+        last_error: str | None = None
         for execute_ord in self._proxy_execute_candidates(ord_path):
             try:
                 result = await asyncio.to_thread(self.client.invoke_action_ord, execute_ord)
             except Exception as exc:  # noqa: BLE001 - keep write flow resilient
                 logger.info("Niagara proxy execute raised ord=%s error=%s", execute_ord, exc)
+                last_error = f"{execute_ord}: raised={exc}"
                 continue
             if result.ok:
                 logger.info("Niagara proxy execute ok ord=%s", execute_ord)
-                return execute_ord
+                return execute_ord, None
             logger.info(
                 "Niagara proxy execute failed ord=%s status=%s error=%s",
                 execute_ord,
                 result.status,
                 result.error,
             )
-        return None
+            detail = result.error or f"status={result.status}"
+            last_error = f"{execute_ord}: {detail}"
+        return None, last_error
 
     def _complete_successful_write(
         self,
