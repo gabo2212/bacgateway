@@ -779,13 +779,23 @@ class NiagaraClient:
                         delay_sec=0.2,
                     )
                     if observed_value is None:
-                        failure_bits.append(f"{label}:{response.status}:readback_error")
-                        continue
-                    if abs(observed_value - numeric_value) > 0.11:
-                        failure_bits.append(
-                            f"{label}:{response.status}:unapplied={observed_value}"
+                        # Treat as tentative success so higher layers can trigger
+                        # proxyExt/execute + cross-path confirmation.
+                        return WriteResult(
+                            ok=True,
+                            status=response.status,
+                            error="slot_unapplied=readback_error",
+                            response_body=response.body,
                         )
-                        continue
+                    if abs(observed_value - numeric_value) > 0.11:
+                        # Slot endpoints often accept the write first and only apply
+                        # after proxy execute. Let caller confirm + execute fallback.
+                        return WriteResult(
+                            ok=True,
+                            status=response.status,
+                            error=f"slot_unapplied={observed_value}",
+                            response_body=response.body,
+                        )
                 return WriteResult(
                     ok=True,
                     status=response.status,

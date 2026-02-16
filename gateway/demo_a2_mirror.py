@@ -685,7 +685,8 @@ class MirrorService:
                         )
 
                 err = (
-                    f"accepted-but-unconfirmed on {ord_path} status={attempt.status}: "
+                    f"accepted-but-unconfirmed on {ord_path} status={attempt.status} "
+                    f"tentative={attempt.error}: "
                     f"{confirm_error}"
                 )
                 path_errors.append(err)
