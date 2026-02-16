@@ -602,6 +602,8 @@ class MirrorService:
                     attempt = await asyncio.to_thread(
                         self.client.invoke_action_ord,
                         ord_path,
+                        True,
+                        value,
                     )
                 else:
                     attempt = await asyncio.to_thread(self.client.write_real, ord_path, value)

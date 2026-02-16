@@ -846,42 +846,123 @@ class NiagaraClient:
                     time.sleep(max(0.0, delay_sec))
         return None
 
-    def invoke_action_ord(self, ord_expression: str, ensure_auth: bool = True) -> WriteResult:
+    def invoke_action_ord(
+        self,
+        ord_expression: str,
+        ensure_auth: bool = True,
+        numeric_arg: float | None = None,
+    ) -> WriteResult:
         if ensure_auth:
             self.ensure_login(ord_expression)
 
-        headers = {"Accept": "application/xml,text/xml,*/*"}
-        post_response = self._request_with_reauth(
-            method="POST",
-            path="/ord",
-            ord_query=ord_expression,
-            data=b"",
-            headers=headers,
-            probe_ord_path=self._probe_ord_path or ord_expression,
-        )
-        logger.info(
-            "niagara_action_invoke ord=%s method=POST status=%s",
-            ord_expression,
-            post_response.status,
-        )
-        if (
-            200 <= post_response.status < 300
-            and not self._needs_login(post_response)
-            and not self._is_unexpected_html_response(post_response)
-        ):
-            return WriteResult(
-                ok=True,
-                status=post_response.status,
-                error=None,
-                response_body=post_response.body,
+        xml_headers = {
+            "Content-Type": "text/xml; charset=utf-8",
+            "Accept": "application/xml,text/xml,*/*",
+        }
+        form_headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/xml,text/xml,*/*",
+        }
+        empty_headers = {"Accept": "application/xml,text/xml,*/*"}
+        attempts: list[tuple[str, Mapping[str, str], bytes, str]] = []
+
+        if numeric_arg is not None:
+            numeric_value = float(numeric_arg)
+            numeric_text = str(numeric_value)
+            bog_numeric_override = (
+                '<bog version="1.0">\n'
+                '<p m="c=control" t="c:NumericOverride">\n'
+                f' <p n="value" v="{numeric_text}"/>\n'
+                "</p>\n"
+                "</bog>\n"
             )
+            obix_obj_arg = (
+                '<obj xmlns="http://obix.org/ns/schema/1.0">'
+                f'<real name="arg" val="{numeric_text}"/>'
+                "</obj>"
+            ).encode("utf-8")
+
+            attempts.extend(
+                [
+                    (
+                        "POST",
+                        form_headers,
+                        urllib.parse.urlencode({"actionArg": numeric_text}).encode("utf-8"),
+                        "post_form_actionArg",
+                    ),
+                    (
+                        "POST",
+                        form_headers,
+                        urllib.parse.urlencode({"arg": numeric_text}).encode("utf-8"),
+                        "post_form_arg",
+                    ),
+                    (
+                        "POST",
+                        form_headers,
+                        urllib.parse.urlencode({"value": numeric_text}).encode("utf-8"),
+                        "post_form_value",
+                    ),
+                    (
+                        "POST",
+                        form_headers,
+                        urllib.parse.urlencode({"arg": bog_numeric_override}).encode("utf-8"),
+                        "post_form_arg_bog_numeric_override",
+                    ),
+                    (
+                        "POST",
+                        xml_headers,
+                        bog_numeric_override.encode("utf-8"),
+                        "post_text_xml_bog_numeric_override",
+                    ),
+                    (
+                        "POST",
+                        xml_headers,
+                        obix_obj_arg,
+                        "post_text_xml_obj_arg",
+                    ),
+                ]
+            )
+
+        attempts.append(("POST", empty_headers, b"", "post_empty"))
+
+        attempt_statuses: list[str] = []
+        last_response: _Response | None = None
+        for method, headers, body, label in attempts:
+            response = self._request_with_reauth(
+                method=method,
+                path="/ord",
+                ord_query=ord_expression,
+                data=body,
+                headers=headers,
+                probe_ord_path=self._probe_ord_path or ord_expression,
+            )
+            last_response = response
+            logger.info(
+                "niagara_action_invoke ord=%s mode=%s method=%s status=%s",
+                ord_expression,
+                label,
+                method,
+                response.status,
+            )
+            attempt_statuses.append(f"{label}:{response.status}")
+            if (
+                200 <= response.status < 300
+                and not self._needs_login(response)
+                and not self._is_unexpected_html_response(response)
+            ):
+                return WriteResult(
+                    ok=True,
+                    status=response.status,
+                    error=None,
+                    response_body=response.body,
+                )
 
         get_response = self._request_with_reauth(
             method="GET",
             path="/ord",
             ord_query=ord_expression,
             data=None,
-            headers=headers,
+            headers=empty_headers,
             probe_ord_path=self._probe_ord_path or ord_expression,
         )
         logger.info(
@@ -901,15 +982,17 @@ class NiagaraClient:
                 response_body=get_response.body,
             )
 
-        body_snippet = self._sanitize_body_snippet(get_response.body or post_response.body)
+        if last_response is None:  # pragma: no cover - defensive
+            last_response = _Response(status=0, body="", headers={})
+        body_snippet = self._sanitize_body_snippet(get_response.body or last_response.body)
         return WriteResult(
             ok=False,
             status=get_response.status,
             error=(
                 "Niagara action invoke failed "
-                f"(post={post_response.status}, get={get_response.status}, body={body_snippet!r})"
+                f"(responses={','.join(attempt_statuses)}, get={get_response.status}, body={body_snippet!r})"
             ),
-            response_body=get_response.body or post_response.body,
+            response_body=get_response.body or last_response.body,
         )
 
     def _ensure_login_locked(self, probe_ord_path: str | None) -> None:
