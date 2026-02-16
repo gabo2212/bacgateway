@@ -8,11 +8,13 @@ import json
 import logging
 import os
 import re
+import socket
 import threading
 import time
 import urllib.parse
 import urllib.request
 import urllib.response
+import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from http.cookiejar import Cookie, CookieJar
@@ -35,6 +37,7 @@ _LOGIN_MARKERS = (
 _OBIX_MARKERS = ("<obj", "<real")
 _METHOD_NOT_ALLOWED_MARKERS = ("method not allowed", "unsupported method")
 _SUPPORTED_HASHES = {"sha1", "sha256", "sha512"}
+_FOX_DEFAULT_PORT = 1911
 _LOGIN_SCHEME_COOKIE_DIGEST = "cookiedigest"
 _INPUT_TAG_RE = re.compile(r"<input\b[^>]*>", re.IGNORECASE | re.DOTALL)
 _INPUT_ATTR_RE = re.compile(
@@ -253,6 +256,118 @@ def _local_name(tag: str) -> str:
     if "}" in tag:
         return tag.split("}", 1)[1]
     return tag
+
+
+def _fox_message(kind: str, msg_id: int, status: int, op: str, body: str, *, newline: str = "\n") -> str:
+    return f"fox {kind} {msg_id} {status} {op}{newline}{{{newline}{body}{newline}}};;{newline}"
+
+
+def _fox_client_hello(
+    msg_id: int,
+    http_session: str,
+    *,
+    host_name: str,
+    host_address: str,
+    vm_uuid: str,
+    newline: str = "\n",
+) -> str:
+    body = newline.join(
+        (
+            "fox.version=s:1.0.1",
+            "id=i:0",
+            f"hostName=s:{host_name}",
+            f"hostAddress=s:{host_address}",
+            "app.name=s:WbApplet",
+            "app.version=s:3.8.213",
+            "vm.name=s:Java HotSpot(TM) 64-Bit Server VM",
+            "vm.version=s:25.202-b08",
+            "os.name=s:Windows 10",
+            "os.version=s:10.0",
+            f"httpSession=s:{http_session}",
+            "lang=s:en",
+            "timeZone=s:America/New_York;-18000000;3600000;02:00:00.000,wall,march,8,on or after,sunday,undefined;02:00:00.000,wall,november,1,on or after,sunday,undefined",
+            "hostId=s:#null;",
+            f"vmUuid=s:{vm_uuid}",
+        )
+    )
+    return _fox_message("a", msg_id, -1, "fox hello", body, newline=newline)
+
+
+def _fox_wire_len_prefixed_text(text: str) -> bytes:
+    raw = text.encode("utf-8")
+    if len(raw) > 0xFFFF:
+        raise ValueError(f"Fox wire text too long: {len(raw)}")
+    return len(raw).to_bytes(2, "big") + raw
+
+
+def _fox_http_credentials_blob(username: str, session_id: str) -> bytes:
+    # Matches Niagara Workbench/Applet authInputHttp payload shape:
+    # baja:HttpFoxCredentials { username: baja:String, sessionId: baja:String }.
+    out = bytearray()
+    out.extend(b"\x01\x01\x01\x00")
+    out.extend(b"\xff\xff\xff\xff")
+    out.extend(b"\x00\x01")
+    out.extend(_fox_wire_len_prefixed_text("baja:HttpFoxCredentials"))
+
+    out.extend(b"\x01\x01\x01\x01")
+    out.extend(_fox_wire_len_prefixed_text("username"))
+    out.extend(b"\x00\x00\x00\x00")
+    out.extend(b"\x00\x01")
+    out.extend(_fox_wire_len_prefixed_text("baja:String"))
+    out.extend(b"\x01")
+    out.extend(_fox_wire_len_prefixed_text(username))
+
+    out.extend(b"\x01\x01\x01\x01")
+    out.extend(_fox_wire_len_prefixed_text("sessionId"))
+    out.extend(b"\x00\x00\x00\x00")
+    out.extend(b"\x00\x01")
+    out.extend(_fox_wire_len_prefixed_text("baja:String"))
+    out.extend(b"\x01")
+    out.extend(_fox_wire_len_prefixed_text(session_id))
+
+    out.extend(b"\x00")
+    return bytes(out)
+
+
+def _fox_auth_message1(msg_id: int, username: str, session_id: str, *, newline: str = "\n") -> bytes:
+    credentials = _fox_http_credentials_blob(username=username, session_id=session_id)
+    prefix = (
+        f"fox a {msg_id} -1 fox authMessage1{newline}"
+        f"{{{newline}"
+        f"authInput=s:authInputHttp{newline}"
+        f"username=s:{username}{newline}"
+        f"credentials=b:{len(credentials)}["
+    ).encode("ascii")
+    suffix = f"]{newline}}};;{newline}".encode("ascii")
+    return prefix + credentials + suffix
+
+
+def _fox_make_broker_channel(msg_id: int, *, newline: str = "\n") -> str:
+    return _fox_message("s", msg_id, 0, "sys makeBrokerChannel", "ord=s:station:", newline=newline)
+
+
+def _fox_station_invoke(
+    msg_id: int,
+    ord_path: str,
+    action: str,
+    value: float | None,
+    *,
+    newline: str = "\n",
+) -> str:
+    lines = [f"ord=s:{ord_path}", f"action=s:{action}"]
+    if value is not None:
+        value_text = str(float(value))
+        bog_xml = (
+            f'<bog version="1.0">{newline}'
+            f'<p m="c=control" t="c:NumericOverride">{newline}'
+            f' <p n="value" v="{value_text}"/>{newline}'
+            f"</p>{newline}"
+            f"</bog>{newline}"
+        )
+        bog_wire = f"o:bog {len(bog_xml.encode('utf-8'))}[{bog_xml}]"
+        lines.append(f"arg={bog_wire}")
+    body = newline.join(lines)
+    return _fox_message("s", msg_id, 0, "station invoke", body, newline=newline)
 
 
 def parse_obix_real(xml_text: str) -> NiagaraReal:
@@ -1065,15 +1180,28 @@ class NiagaraClient:
                 response_body=get_response.body,
             )
 
+        fox_result: WriteResult | None = None
+        if action_name:
+            fox_result = self._invoke_action_ord_via_fox(
+                ord_path=action_base_ord,
+                action_name=action_name,
+                numeric_arg=resolved_arg,
+            )
+            if fox_result.ok:
+                return fox_result
+
         if last_response is None:  # pragma: no cover - defensive
             last_response = _Response(status=0, body="", headers={})
         body_snippet = self._sanitize_body_snippet(get_response.body or last_response.body)
+        fox_detail = ""
+        if fox_result is not None and fox_result.error:
+            fox_detail = f", fox={self._sanitize_body_snippet(fox_result.error, 180)!r}"
         return WriteResult(
             ok=False,
             status=get_response.status,
             error=(
                 "Niagara action invoke failed "
-                f"(responses={','.join(attempt_statuses)}, get={get_response.status}, body={body_snippet!r})"
+                f"(responses={','.join(attempt_statuses)}, get={get_response.status}, body={body_snippet!r}{fox_detail})"
             ),
             response_body=get_response.body or last_response.body,
         )
@@ -1099,6 +1227,196 @@ class NiagaraClient:
                     action_arg = values[0]
                     break
         return base, action_name, action_arg
+
+    def _host_without_port(self) -> str:
+        host = self.host.strip()
+        if host.startswith("["):
+            end = host.find("]")
+            if end > 1:
+                return host[1:end]
+            return host
+        if host.count(":") == 1:
+            maybe_host, maybe_port = host.rsplit(":", 1)
+            if maybe_port.isdigit():
+                return maybe_host
+        return host
+
+    def _niagara_session_cookie_value(self) -> str | None:
+        for cookie in self._cookie_jar:
+            if cookie.name == "niagara_session" and cookie.value:
+                return cookie.value
+        return None
+
+    def _resolve_fox_local_address(self, fox_host: str) -> str:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                probe.connect((fox_host, _FOX_DEFAULT_PORT))
+                return probe.getsockname()[0]
+        except Exception:
+            return "127.0.0.1"
+
+    def _invoke_action_ord_via_fox(
+        self,
+        *,
+        ord_path: str,
+        action_name: str,
+        numeric_arg: float | None,
+    ) -> WriteResult:
+        if not self.username:
+            return WriteResult(
+                ok=False,
+                status=None,
+                error="fox fallback skipped: missing username",
+                response_body=None,
+            )
+        session_id = self._niagara_session_cookie_value()
+        if not session_id:
+            return WriteResult(
+                ok=False,
+                status=None,
+                error="fox fallback skipped: missing niagara_session cookie",
+                response_body=None,
+            )
+
+        action_lower = action_name.strip().lower()
+        if action_lower in {"set", "override", "emergencyoverride"} and numeric_arg is None:
+            return WriteResult(
+                ok=False,
+                status=None,
+                error=f"fox fallback skipped: numeric arg required for action '{action_name}'",
+                response_body=None,
+            )
+        fox_value = float(numeric_arg) if numeric_arg is not None else None
+
+        fox_host = self._host_without_port()
+        newline = "\n"
+        hello_id = 1
+        auth_id = 2
+        broker_id = 3
+        invoke_id = 4
+
+        try:
+            messages: list[str | bytes] = [
+                _fox_client_hello(
+                    hello_id,
+                    session_id,
+                    host_name=socket.gethostname(),
+                    host_address=self._resolve_fox_local_address(fox_host),
+                    vm_uuid=str(uuid.uuid4()),
+                    newline=newline,
+                ),
+                _fox_auth_message1(auth_id, self.username, session_id, newline=newline),
+                _fox_make_broker_channel(broker_id, newline=newline),
+                _fox_station_invoke(
+                    invoke_id,
+                    ord_path=ord_path,
+                    action=action_name,
+                    value=fox_value,
+                    newline=newline,
+                ),
+            ]
+        except Exception as exc:
+            return WriteResult(
+                ok=False,
+                status=None,
+                error=f"fox fallback payload build failed: {exc}",
+                response_body=None,
+            )
+
+        recv_chunks: list[bytes] = []
+        send_error: str | None = None
+        recv_error: str | None = None
+        connect_timeout = max(1.0, float(self.timeout_sec))
+
+        def drain_for(sock: socket.socket, seconds: float) -> bool:
+            nonlocal recv_error
+            if seconds <= 0.0:
+                return True
+            end = time.monotonic() + seconds
+            while time.monotonic() < end:
+                remaining = max(0.01, end - time.monotonic())
+                sock.settimeout(min(connect_timeout, remaining))
+                try:
+                    data = sock.recv(65535)
+                except (TimeoutError, socket.timeout):
+                    break
+                except OSError as exc:  # pragma: no cover - network edge
+                    recv_error = f"recv failed: {exc}"
+                    return False
+                if not data:
+                    break
+                recv_chunks.append(data)
+            return True
+
+        try:
+            with socket.create_connection((fox_host, _FOX_DEFAULT_PORT), timeout=connect_timeout) as sock:
+                for idx, message in enumerate(messages, start=1):
+                    payload = message if isinstance(message, bytes) else message.encode("utf-8")
+                    try:
+                        sock.sendall(payload)
+                    except OSError as exc:
+                        send_error = f"send failed on fox payload {idx}: {exc}"
+                        break
+
+                    if idx == 1:
+                        if not drain_for(sock, 0.2):
+                            break
+                    elif idx == 2:
+                        if not drain_for(sock, 0.2):
+                            break
+                    elif idx == 3:
+                        if not drain_for(sock, 0.08):
+                            break
+                    time.sleep(0.001)
+
+                if send_error is None and recv_error is None:
+                    drain_for(sock, 2.0)
+        except OSError as exc:
+            return WriteResult(
+                ok=False,
+                status=None,
+                error=f"fox fallback socket failed: {exc}",
+                response_body=None,
+            )
+
+        response_text = b"".join(recv_chunks).decode("utf-8", errors="replace")
+        if send_error or recv_error:
+            detail_bits: list[str] = []
+            if send_error:
+                detail_bits.append(send_error)
+            if recv_error:
+                detail_bits.append(recv_error)
+            detail = "; ".join(detail_bits)
+            return WriteResult(
+                ok=False,
+                status=None,
+                error=f"fox fallback transport error: {detail}",
+                response_body=response_text or None,
+            )
+
+        expected_ok = f"fox r {invoke_id} 0 station invoke"
+        if expected_ok in response_text.lower():
+            logger.info(
+                "niagara_fox_invoke ok ord=%s action=%s",
+                ord_path,
+                action_name,
+            )
+            return WriteResult(
+                ok=True,
+                status=200,
+                error=None,
+                response_body=response_text,
+            )
+
+        error_snippet = self._sanitize_body_snippet(response_text, limit=240)
+        if not error_snippet:
+            error_snippet = "no fox response bytes captured"
+        return WriteResult(
+            ok=False,
+            status=None,
+            error=f"fox fallback invoke failed: {error_snippet}",
+            response_body=response_text or None,
+        )
 
     def _ensure_login_locked(self, probe_ord_path: str | None) -> None:
         if self._login_ok:
