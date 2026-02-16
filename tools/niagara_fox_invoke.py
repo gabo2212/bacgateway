@@ -44,12 +44,21 @@ def _build_station_invoke(msg_id: int, ord_path: str, action: str, value: float,
     return _build_fox_message("s", msg_id, 0, "station invoke", body, newline=newline)
 
 
+def _build_station_sub(msg_id: int, ord_path: str, depth: int, *, newline: str) -> str:
+    body = (
+        f"ord=s:{ord_path}{newline}"
+        f"depth=i:{int(depth)}"
+    )
+    return _build_fox_message("s", msg_id, 0, "station sub", body, newline=newline)
+
+
 def _send_and_recv(
     host: str,
     port: int,
     messages: list[str],
     timeout: float,
     recv_window: float,
+    inter_message_delay: float,
 ) -> tuple[str, str | None]:
     send_error: str | None = None
     with socket.create_connection((host, port), timeout=timeout) as sock:
@@ -61,7 +70,7 @@ def _send_and_recv(
             except OSError as exc:
                 send_error = f"send failed on payload {idx}: {exc}"
                 break
-            time.sleep(0.05)
+            time.sleep(max(0.0, inter_message_delay))
 
         end = time.time() + recv_window
         chunks: list[bytes] = []
@@ -108,6 +117,28 @@ def main() -> int:
         help="Send circuit open/stream/close syncFromMaster messages before invoke",
     )
     parser.add_argument(
+        "--sync-cycles",
+        type=int,
+        default=1,
+        help="How many circuit open/stream/close cycles to send when --sync-prelude is set (default: 1)",
+    )
+    parser.add_argument(
+        "--station-sub",
+        action="store_true",
+        help="Send station sub before invoke (often needed for handle context)",
+    )
+    parser.add_argument(
+        "--station-sub-ord",
+        default="h:1",
+        help="ORD for station sub when --station-sub is set (default: h:1)",
+    )
+    parser.add_argument(
+        "--station-sub-depth",
+        type=int,
+        default=0,
+        help="Depth for station sub (default: 0)",
+    )
+    parser.add_argument(
         "--recv-window",
         type=float,
         default=2.0,
@@ -129,17 +160,34 @@ def main() -> int:
         action="store_true",
         help="Use CRLF line endings instead of LF",
     )
+    parser.add_argument(
+        "--inter-message-delay",
+        type=float,
+        default=0.05,
+        help="Delay in seconds between payload sends (default: 0.05)",
+    )
     args = parser.parse_args()
 
     newline = "\r\n" if args.crlf else "\n"
     msg_id = int(args.message_id)
     messages: list[str] = []
     if args.sync_prelude:
-        messages.append(_build_sync_open(msg_id, args.circuit_id, newline=newline))
-        msg_id += 1
-        messages.append(_build_sync_stream(msg_id, args.circuit_id, newline=newline))
-        msg_id += 1
-        messages.append(_build_sync_close(msg_id, args.circuit_id, newline=newline))
+        for _ in range(max(1, int(args.sync_cycles))):
+            messages.append(_build_sync_open(msg_id, args.circuit_id, newline=newline))
+            msg_id += 1
+            messages.append(_build_sync_stream(msg_id, args.circuit_id, newline=newline))
+            msg_id += 1
+            messages.append(_build_sync_close(msg_id, args.circuit_id, newline=newline))
+            msg_id += 1
+    if args.station_sub:
+        messages.append(
+            _build_station_sub(
+                msg_id,
+                args.station_sub_ord,
+                args.station_sub_depth,
+                newline=newline,
+            )
+        )
         msg_id += 1
     messages.append(_build_station_invoke(msg_id, args.ord, args.action, args.value, newline=newline))
 
@@ -157,6 +205,7 @@ def main() -> int:
         messages=messages,
         timeout=max(0.1, float(args.timeout)),
         recv_window=max(0.1, float(args.recv_window)),
+        inter_message_delay=float(args.inter_message_delay),
     )
 
     print("# inbound response")
