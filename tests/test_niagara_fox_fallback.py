@@ -45,3 +45,30 @@ def test_fox_fallback_requires_session_cookie() -> None:
     assert result.ok is False
     assert result.error is not None
     assert "missing niagara_session cookie" in result.error
+
+
+def test_invoke_action_ord_skip_http_returns_fast_on_fox_failure(monkeypatch) -> None:
+    client = NiagaraClient(host="example.com", username="user", password="pass")
+    http_called = {"count": 0}
+
+    def fake_request_with_reauth(method, path, ord_query, data, headers, probe_ord_path=None, retried=False):
+        http_called["count"] += 1
+        return _Response(status=500, body="", headers={})
+
+    def fake_fox_fallback(*, ord_path: str, action_name: str, numeric_arg: float | None) -> WriteResult:
+        return WriteResult(ok=False, status=None, error="boom", response_body="fox")
+
+    monkeypatch.setattr(client, "_request_with_reauth", fake_request_with_reauth)
+    monkeypatch.setattr(client, "_invoke_action_ord_via_fox", fake_fox_fallback)
+
+    result = client.invoke_action_ord(
+        "station:|slot:/Drivers/X/points/Y/override(77.1)",
+        ensure_auth=False,
+        numeric_arg=None,
+        prefer_fox=True,
+        skip_http=True,
+    )
+
+    assert result.ok is False
+    assert "http skipped" in (result.error or "")
+    assert http_called["count"] == 0

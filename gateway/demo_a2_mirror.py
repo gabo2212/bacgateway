@@ -320,40 +320,29 @@ class MirrorService:
         value_text = f"{float(value)}"
         candidates: list[str] = []
 
-        # Try explicit action invocation syntax first for action slots.
-        for base_path in (primary_set, point_out):
+        # FOX invoke strategy: keep candidates minimal so writes fail fast and produce focused logs.
+        roots: list[str] = []
+        for raw_path in (primary_set, point_out):
+            base = raw_path.split("?", 1)[0]
             for suffix in ("/set", "/out"):
-                if base_path.endswith(suffix):
-                    root = base_path[: -len(suffix)]
-                    candidates.extend(
-                        [
-                            f"{root}/proxyExt/writeValue",
-                            f"{root}/in8",
-                            f"{root}/in10",
-                            f"{root}/in16",
-                            f"{root}/writeValue",
-                            f"{root}/proxyExt/set({value_text})",
-                            f"{root}/proxyExt/set?actionArg={value_text}",
-                            f"{root}/proxyExt/override({value_text})",
-                            f"{root}/proxyExt/override?actionArg={value_text}",
-                            f"{root}/proxyExt/emergencyOverride({value_text})",
-                            f"{root}/proxyExt/emergencyOverride?actionArg={value_text}",
-                            f"{root}/proxyExt/set",
-                            f"{root}/proxyExt/override",
-                            f"{root}/proxyExt/emergencyOverride",
-                            f"{root}/set({value_text})",
-                            f"{root}/set?actionArg={value_text}",
-                            f"{root}/override({value_text})",
-                            f"{root}/override?actionArg={value_text}",
-                            f"{root}/emergencyOverride({value_text})",
-                            f"{root}/emergencyOverride?actionArg={value_text}",
-                            f"{root}/set",
-                            f"{root}/override",
-                            f"{root}/emergencyOverride",
-                        ]
-                    )
+                if base.endswith(suffix):
+                    base = base[: -len(suffix)]
                     break
-        candidates.append(primary_set)
+            if base:
+                roots.append(base)
+
+        seen_roots: set[str] = set()
+        for root in roots:
+            if root in seen_roots:
+                continue
+            seen_roots.add(root)
+            candidates.extend(
+                [
+                    f"{root}/override({value_text})",
+                    f"{root}/set({value_text})",
+                    f"{root}/emergencyOverride({value_text})",
+                ]
+            )
 
         deduped: list[str] = []
         seen: set[str] = set()
@@ -362,6 +351,7 @@ class MirrorService:
                 continue
             seen.add(path)
             deduped.append(path)
+        logger.info("Niagara write candidates point=%s value=%s candidates=%s", point, value, deduped)
         return deduped
 
     def object_for_point(self, point: PointName) -> AnalogValueObject:
@@ -590,23 +580,22 @@ class MirrorService:
             previous_value = self.state.current_point(point)
         path_errors: list[str] = []
         for ord_path in self._write_path_candidates(point, value):
+            start_mono = time.monotonic()
+            logger.info(
+                "Niagara write attempt point=%s value=%s ord=%s mode=fox_only",
+                point,
+                value,
+                ord_path,
+            )
             try:
-                path_l = ord_path.lower()
-                if (
-                    (ord_path.endswith(")") and "(" in ord_path)
-                    or ("?actionarg=" in path_l)
-                    or path_l.endswith("/set")
-                    or path_l.endswith("/override")
-                    or path_l.endswith("/emergencyoverride")
-                ):
-                    attempt = await asyncio.to_thread(
-                        self.client.invoke_action_ord,
-                        ord_path,
-                        True,
-                        value,
-                    )
-                else:
-                    attempt = await asyncio.to_thread(self.client.write_real, ord_path, value)
+                attempt = await asyncio.to_thread(
+                    self.client.invoke_action_ord,
+                    ord_path,
+                    True,
+                    value,
+                    True,   # prefer_fox
+                    True,   # skip_http
+                )
             except Exception as exc:  # noqa: BLE001 - keep service alive
                 attempt = WriteResult(
                     ok=False,
@@ -614,13 +603,22 @@ class MirrorService:
                     error=f"raised: {exc}",
                     response_body=None,
                 )
+            elapsed = time.monotonic() - start_mono
+            logger.info(
+                "Niagara write attempt done point=%s ord=%s ok=%s status=%s elapsed=%.3fs",
+                point,
+                ord_path,
+                attempt.ok,
+                attempt.status,
+                elapsed,
+            )
             if attempt.ok:
                 confirmed_value, confirm_error = await self._confirm_write_applied(
                     point,
                     value,
                     focus_path=ord_path,
-                    attempts=12,
-                    sleep_sec=0.5,
+                    attempts=10,
+                    sleep_sec=0.25,
                 )
                 if confirm_error is None:
                     applied_value = confirmed_value if confirmed_value is not None else value
@@ -641,8 +639,8 @@ class MirrorService:
                         point,
                         value,
                         focus_path=ord_path,
-                        attempts=12,
-                        sleep_sec=0.5,
+                        attempts=8,
+                        sleep_sec=0.25,
                     )
                     if confirm_error is None:
                         applied_value = confirmed_value if confirmed_value is not None else value
@@ -660,41 +658,33 @@ class MirrorService:
                         f"{ord_path}: proxy execute failed ({execute_error})"
                     )
 
-                if self._is_deferred_write_candidate(ord_path):
-                    logger.info(
-                        "Niagara write pending confirmation point=%s path=%s status=%s; extending confirmation window",
-                        point,
-                        ord_path,
-                        attempt.status,
-                    )
-                    confirmed_value, confirm_error = await self._confirm_write_applied(
-                        point,
-                        value,
-                        focus_path=ord_path,
-                        attempts=90,
-                        sleep_sec=1.0,
-                    )
-                    if confirm_error is None:
-                        applied_value = confirmed_value if confirmed_value is not None else value
-                        return self._complete_successful_write(
-                            point=point,
-                            requested_value=value,
-                            applied_value=applied_value,
-                            now=now,
-                            attempt=attempt,
-                            path=ord_path,
-                            context="after extended confirmation window",
-                        )
-
                 err = (
                     f"accepted-but-unconfirmed on {ord_path} status={attempt.status} "
                     f"tentative={attempt.error}: "
                     f"{confirm_error}"
                 )
                 path_errors.append(err)
+                logger.warning(
+                    "Niagara write unapplied point=%s ord=%s status=%s error=%s response=%r",
+                    point,
+                    ord_path,
+                    attempt.status,
+                    attempt.error,
+                    self._body_snippet(attempt.response_body, 220),
+                )
                 continue
             err = attempt.error or f"status={attempt.status}"
-            path_errors.append(f"{ord_path}: {err}")
+            path_errors.append(
+                f"{ord_path}: {err} response={self._body_snippet(attempt.response_body, 160)!r}"
+            )
+            logger.warning(
+                "Niagara write failed point=%s ord=%s status=%s error=%s response=%r",
+                point,
+                ord_path,
+                attempt.status,
+                err,
+                self._body_snippet(attempt.response_body, 220),
+            )
 
         combined_error = "Niagara write failed or remained unapplied on all candidate paths"
         if path_errors:
@@ -716,6 +706,14 @@ class MirrorService:
             status=None,
         )
 
+    def _body_snippet(self, body: str | None, limit: int = 180) -> str:
+        if not body:
+            return ""
+        compact = " ".join(body.split())
+        if len(compact) <= limit:
+            return compact
+        return compact[:limit]
+
     async def _confirm_write_applied(
         self,
         point: PointName,
@@ -735,15 +733,10 @@ class MirrorService:
                 root = ord_out[: -len(suffix)]
                 read_paths.extend(
                     [
-                        f"{root}/writeValue",
-                        f"{root}/proxyExt/writeValue",
-                        f"{root}/in8",
-                        f"{root}/in10",
-                        f"{root}/in16",
                         f"{root}/out",
-                        f"{root}/proxyExt/in8",
-                        f"{root}/proxyExt/in10",
-                        f"{root}/proxyExt/in16",
+                        f"{root}/in8",
+                        f"{root}/proxyExt/writeValue",
+                        f"{root}/writeValue",
                     ]
                 )
                 break
@@ -823,7 +816,14 @@ class MirrorService:
         last_error: str | None = None
         for execute_ord in self._proxy_execute_candidates(ord_path):
             try:
-                result = await asyncio.to_thread(self.client.invoke_action_ord, execute_ord)
+                result = await asyncio.to_thread(
+                    self.client.invoke_action_ord,
+                    execute_ord,
+                    True,
+                    None,
+                    True,   # prefer_fox
+                    True,   # skip_http
+                )
             except Exception as exc:  # noqa: BLE001 - keep write flow resilient
                 logger.info("Niagara proxy execute raised ord=%s error=%s", execute_ord, exc)
                 last_error = f"{execute_ord}: raised={exc}"

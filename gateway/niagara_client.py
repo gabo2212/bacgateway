@@ -966,6 +966,8 @@ class NiagaraClient:
         ord_expression: str,
         ensure_auth: bool = True,
         numeric_arg: float | None = None,
+        prefer_fox: bool = False,
+        skip_http: bool = False,
     ) -> WriteResult:
         if ensure_auth:
             self.ensure_login(ord_expression)
@@ -988,6 +990,32 @@ class NiagaraClient:
                 resolved_arg = float(action_arg_hint.strip())
             except ValueError:
                 resolved_arg = None
+
+        fox_result: WriteResult | None = None
+        if prefer_fox and action_name:
+            fox_result = self._invoke_action_ord_via_fox(
+                ord_path=action_base_ord,
+                action_name=action_name,
+                numeric_arg=resolved_arg,
+            )
+            if fox_result.ok:
+                return fox_result
+            if skip_http:
+                detail = fox_result.error or "unknown fox error"
+                return WriteResult(
+                    ok=False,
+                    status=fox_result.status,
+                    error=f"FOX invoke failed (http skipped): {detail}",
+                    response_body=fox_result.response_body,
+                )
+
+        if skip_http and not action_name:
+            return WriteResult(
+                ok=False,
+                status=None,
+                error="FOX invoke skipped: ORD does not resolve to a Niagara action",
+                response_body=None,
+            )
 
         if action_name:
             if resolved_arg is None:
@@ -1180,8 +1208,7 @@ class NiagaraClient:
                 response_body=get_response.body,
             )
 
-        fox_result: WriteResult | None = None
-        if action_name:
+        if action_name and fox_result is None:
             fox_result = self._invoke_action_ord_via_fox(
                 ord_path=action_base_ord,
                 action_name=action_name,
@@ -1262,6 +1289,13 @@ class NiagaraClient:
         action_name: str,
         numeric_arg: float | None,
     ) -> WriteResult:
+        logger.info(
+            "niagara_fox_invoke start host=%s ord=%s action=%s value=%s",
+            self.host,
+            ord_path,
+            action_name,
+            numeric_arg,
+        )
         if not self.username:
             return WriteResult(
                 ok=False,
@@ -1387,6 +1421,13 @@ class NiagaraClient:
             if recv_error:
                 detail_bits.append(recv_error)
             detail = "; ".join(detail_bits)
+            logger.warning(
+                "niagara_fox_invoke transport_error host=%s ord=%s action=%s detail=%s",
+                self.host,
+                ord_path,
+                action_name,
+                detail,
+            )
             return WriteResult(
                 ok=False,
                 status=None,
@@ -1397,9 +1438,10 @@ class NiagaraClient:
         expected_ok = f"fox r {invoke_id} 0 station invoke"
         if expected_ok in response_text.lower():
             logger.info(
-                "niagara_fox_invoke ok ord=%s action=%s",
+                "niagara_fox_invoke ok ord=%s action=%s response=%r",
                 ord_path,
                 action_name,
+                self._sanitize_body_snippet(response_text, limit=220),
             )
             return WriteResult(
                 ok=True,
@@ -1411,6 +1453,13 @@ class NiagaraClient:
         error_snippet = self._sanitize_body_snippet(response_text, limit=240)
         if not error_snippet:
             error_snippet = "no fox response bytes captured"
+        logger.warning(
+            "niagara_fox_invoke failed host=%s ord=%s action=%s response=%r",
+            self.host,
+            ord_path,
+            action_name,
+            error_snippet,
+        )
         return WriteResult(
             ok=False,
             status=None,
