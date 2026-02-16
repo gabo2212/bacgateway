@@ -244,8 +244,8 @@ def main() -> int:
     parser.add_argument(
         "--message-id",
         type=int,
-        default=random.randint(12000, 65000),
-        help="Starting Fox message id",
+        default=None,
+        help="Starting Fox message id (auto when --fox-http-auth is enabled)",
     )
     parser.add_argument(
         "--fox-http-auth",
@@ -443,7 +443,23 @@ def main() -> int:
             )
         return user
 
-    msg_id = int(args.message_id)
+    if args.fox_http_auth:
+        bootstrap_next_id = max(
+            int(args.hello_msg_id),
+            int(args.auth_msg_id),
+            int(args.broker_msg_id),
+        ) + 1
+        if args.message_id is not None and int(args.message_id) != bootstrap_next_id:
+            print(
+                f"# note: overriding --message-id {int(args.message_id)} to {bootstrap_next_id} "
+                "to keep sequential IDs after fox-http-auth bootstrap"
+            )
+        msg_id = bootstrap_next_id
+    else:
+        if args.message_id is None:
+            msg_id = random.randint(12000, 65000)
+        else:
+            msg_id = int(args.message_id)
     messages: list[FoxMessage] = []
 
     if args.fox_http_auth:
