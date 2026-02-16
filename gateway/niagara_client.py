@@ -397,6 +397,7 @@ class NiagaraClient:
             path_l.endswith("/writevalue")
             or re.search(r"/in\d+$", path_l) is not None
         )
+        verify_slot_readback = prefer_override_status
         xml_body = (
             '<real xmlns="http://obix.org/ns/schema/1.0" '
             f'val="{numeric_value}"/>'
@@ -771,6 +772,20 @@ class NiagaraClient:
                 if self._is_unexpected_html_response(response):
                     failure_bits.append(f"{label}:{response.status}:html")
                     continue
+                if verify_slot_readback:
+                    observed_value = self._read_back_real_value(
+                        ord_path,
+                        retries=3,
+                        delay_sec=0.2,
+                    )
+                    if observed_value is None:
+                        failure_bits.append(f"{label}:{response.status}:readback_error")
+                        continue
+                    if abs(observed_value - numeric_value) > 0.11:
+                        failure_bits.append(
+                            f"{label}:{response.status}:unapplied={observed_value}"
+                        )
+                        continue
                 return WriteResult(
                     ok=True,
                     status=response.status,
@@ -800,6 +815,26 @@ class NiagaraClient:
             error=f"Niagara write failed ({detail})",
             response_body=last_response.body,
         )
+
+    def _read_back_real_value(
+        self,
+        ord_path: str,
+        retries: int = 2,
+        delay_sec: float = 0.1,
+    ) -> float | None:
+        attempts = max(1, retries)
+        for idx in range(attempts):
+            try:
+                real = self.read_real(
+                    ord_path,
+                    ensure_auth=False,
+                    allow_reauth=False,
+                )
+                return real.value
+            except Exception:
+                if idx + 1 < attempts:
+                    time.sleep(max(0.0, delay_sec))
+        return None
 
     def invoke_action_ord(self, ord_expression: str, ensure_auth: bool = True) -> WriteResult:
         if ensure_auth:
