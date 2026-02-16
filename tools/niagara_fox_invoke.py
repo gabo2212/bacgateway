@@ -59,8 +59,9 @@ def _send_and_recv(
     timeout: float,
     recv_window: float,
     inter_message_delay: float,
-) -> tuple[str, str | None]:
+) -> tuple[str, str | None, str | None]:
     send_error: str | None = None
+    recv_error: str | None = None
     with socket.create_connection((host, port), timeout=timeout) as sock:
         sock.settimeout(timeout)
         for idx, message in enumerate(messages, start=1):
@@ -79,11 +80,14 @@ def _send_and_recv(
                 data = sock.recv(65535)
             except TimeoutError:
                 break
+            except OSError as exc:
+                recv_error = f"recv failed: {exc}"
+                break
             if not data:
                 break
             chunks.append(data)
 
-        return b"".join(chunks).decode("utf-8", errors="replace"), send_error
+        return b"".join(chunks).decode("utf-8", errors="replace"), send_error, recv_error
 
 
 def main() -> int:
@@ -121,6 +125,12 @@ def main() -> int:
         type=int,
         default=1,
         help="How many circuit open/stream/close cycles to send when --sync-prelude is set (default: 1)",
+    )
+    parser.add_argument(
+        "--sync-order",
+        choices=("before-sub", "after-sub"),
+        default="before-sub",
+        help="When to send sync cycles relative to station-sub (default: before-sub)",
     )
     parser.add_argument(
         "--station-sub",
@@ -171,14 +181,20 @@ def main() -> int:
     newline = "\r\n" if args.crlf else "\n"
     msg_id = int(args.message_id)
     messages: list[str] = []
-    if args.sync_prelude:
-        for _ in range(max(1, int(args.sync_cycles))):
-            messages.append(_build_sync_open(msg_id, args.circuit_id, newline=newline))
-            msg_id += 1
-            messages.append(_build_sync_stream(msg_id, args.circuit_id, newline=newline))
-            msg_id += 1
-            messages.append(_build_sync_close(msg_id, args.circuit_id, newline=newline))
-            msg_id += 1
+    sync_cycles = max(1, int(args.sync_cycles))
+
+    def add_sync_cycles(current_msg_id: int) -> int:
+        for _ in range(sync_cycles):
+            messages.append(_build_sync_open(current_msg_id, args.circuit_id, newline=newline))
+            current_msg_id += 1
+            messages.append(_build_sync_stream(current_msg_id, args.circuit_id, newline=newline))
+            current_msg_id += 1
+            messages.append(_build_sync_close(current_msg_id, args.circuit_id, newline=newline))
+            current_msg_id += 1
+        return current_msg_id
+
+    if args.sync_prelude and args.sync_order == "before-sub":
+        msg_id = add_sync_cycles(msg_id)
     if args.station_sub:
         messages.append(
             _build_station_sub(
@@ -189,6 +205,8 @@ def main() -> int:
             )
         )
         msg_id += 1
+    if args.sync_prelude and args.sync_order == "after-sub":
+        msg_id = add_sync_cycles(msg_id)
     messages.append(_build_station_invoke(msg_id, args.ord, args.action, args.value, newline=newline))
 
     print("# outbound fox payloads")
@@ -199,7 +217,7 @@ def main() -> int:
     if args.dry_run:
         return 0
 
-    response, send_error = _send_and_recv(
+    response, send_error, recv_error = _send_and_recv(
         host=args.host,
         port=args.port,
         messages=messages,
@@ -215,6 +233,8 @@ def main() -> int:
         print("(no response bytes captured)")
     if send_error:
         print(f"# send error: {send_error}")
+    if recv_error:
+        print(f"# recv error: {recv_error}")
     return 0
 
 
