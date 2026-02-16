@@ -7,49 +7,60 @@ import socket
 import time
 
 
-def _build_fox_message(kind: str, msg_id: int, status: int, op: str, body: str) -> str:
-    return f"fox {kind} {msg_id} {status} {op}\n{{\n{body}\n}};;\n"
+def _build_fox_message(kind: str, msg_id: int, status: int, op: str, body: str, *, newline: str) -> str:
+    return f"fox {kind} {msg_id} {status} {op}{newline}{{{newline}{body}{newline}}};;{newline}"
 
 
-def _build_sync_open(msg_id: int, circuit_id: int) -> str:
-    body = f"id=i:{circuit_id}\nchannel=s:station\ncommand=s:syncFromMaster"
-    return _build_fox_message("a", msg_id, -1, "circuit open", body)
+def _build_sync_open(msg_id: int, circuit_id: int, *, newline: str) -> str:
+    body = f"id=i:{circuit_id}\nchannel=s:station\ncommand=s:syncFromMaster".replace("\n", newline)
+    return _build_fox_message("a", msg_id, -1, "circuit open", body, newline=newline)
 
 
-def _build_sync_stream(msg_id: int, circuit_id: int) -> str:
-    body = f"id=i:{circuit_id}\ndata=b:3[{{\n}}]"
-    return _build_fox_message("a", msg_id, -1, "circuit stream", body)
+def _build_sync_stream(msg_id: int, circuit_id: int, *, newline: str) -> str:
+    body = f"id=i:{circuit_id}\ndata=b:3[{{\n}}]".replace("\n", newline)
+    return _build_fox_message("a", msg_id, -1, "circuit stream", body, newline=newline)
 
 
-def _build_sync_close(msg_id: int, circuit_id: int) -> str:
+def _build_sync_close(msg_id: int, circuit_id: int, *, newline: str) -> str:
     body = f"id=i:{circuit_id}"
-    return _build_fox_message("a", msg_id, -1, "circuit close", body)
+    return _build_fox_message("a", msg_id, -1, "circuit close", body, newline=newline)
 
 
-def _build_station_invoke(msg_id: int, ord_path: str, action: str, value: float) -> str:
+def _build_station_invoke(msg_id: int, ord_path: str, action: str, value: float, *, newline: str) -> str:
     value_text = str(float(value))
     bog_xml = (
-        '<bog version="1.0">\n'
-        '<p m="c=control" t="c:NumericOverride">\n'
-        f' <p n="value" v="{value_text}"/>\n'
-        "</p>\n"
-        "</bog>\n"
+        f'<bog version="1.0">{newline}'
+        f'<p m="c=control" t="c:NumericOverride">{newline}'
+        f' <p n="value" v="{value_text}"/>{newline}'
+        f"</p>{newline}"
+        f"</bog>{newline}"
     )
     bog_wire = f"o:bog {len(bog_xml.encode('utf-8'))}[{bog_xml}]"
     body = (
-        f"ord=s:{ord_path}\n"
-        f"action=s:{action}\n"
+        f"ord=s:{ord_path}{newline}"
+        f"action=s:{action}{newline}"
         f"arg={bog_wire}"
     )
-    return _build_fox_message("s", msg_id, 0, "station invoke", body)
+    return _build_fox_message("s", msg_id, 0, "station invoke", body, newline=newline)
 
 
-def _send_and_recv(host: str, port: int, messages: list[str], timeout: float, recv_window: float) -> str:
+def _send_and_recv(
+    host: str,
+    port: int,
+    messages: list[str],
+    timeout: float,
+    recv_window: float,
+) -> tuple[str, str | None]:
+    send_error: str | None = None
     with socket.create_connection((host, port), timeout=timeout) as sock:
         sock.settimeout(timeout)
-        for message in messages:
+        for idx, message in enumerate(messages, start=1):
             payload = message.encode("utf-8")
-            sock.sendall(payload)
+            try:
+                sock.sendall(payload)
+            except OSError as exc:
+                send_error = f"send failed on payload {idx}: {exc}"
+                break
             time.sleep(0.05)
 
         end = time.time() + recv_window
@@ -63,7 +74,7 @@ def _send_and_recv(host: str, port: int, messages: list[str], timeout: float, re
                 break
             chunks.append(data)
 
-        return b"".join(chunks).decode("utf-8", errors="replace")
+        return b"".join(chunks).decode("utf-8", errors="replace"), send_error
 
 
 def main() -> int:
@@ -113,18 +124,24 @@ def main() -> int:
         action="store_true",
         help="Print payload(s) only; do not connect/send",
     )
+    parser.add_argument(
+        "--crlf",
+        action="store_true",
+        help="Use CRLF line endings instead of LF",
+    )
     args = parser.parse_args()
 
+    newline = "\r\n" if args.crlf else "\n"
     msg_id = int(args.message_id)
     messages: list[str] = []
     if args.sync_prelude:
-        messages.append(_build_sync_open(msg_id, args.circuit_id))
+        messages.append(_build_sync_open(msg_id, args.circuit_id, newline=newline))
         msg_id += 1
-        messages.append(_build_sync_stream(msg_id, args.circuit_id))
+        messages.append(_build_sync_stream(msg_id, args.circuit_id, newline=newline))
         msg_id += 1
-        messages.append(_build_sync_close(msg_id, args.circuit_id))
+        messages.append(_build_sync_close(msg_id, args.circuit_id, newline=newline))
         msg_id += 1
-    messages.append(_build_station_invoke(msg_id, args.ord, args.action, args.value))
+    messages.append(_build_station_invoke(msg_id, args.ord, args.action, args.value, newline=newline))
 
     print("# outbound fox payloads")
     for idx, payload in enumerate(messages, start=1):
@@ -134,7 +151,7 @@ def main() -> int:
     if args.dry_run:
         return 0
 
-    response = _send_and_recv(
+    response, send_error = _send_and_recv(
         host=args.host,
         port=args.port,
         messages=messages,
@@ -147,6 +164,8 @@ def main() -> int:
         print(response)
     else:
         print("(no response bytes captured)")
+    if send_error:
+        print(f"# send error: {send_error}")
     return 0
 
 
