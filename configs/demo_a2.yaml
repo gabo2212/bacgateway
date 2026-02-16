@@ -1,6 +1,9 @@
 niagara:
   host: "192.168.15.12"
   scheme: "http"
+  fox_host: "192.168.15.12"   # optional override for FOX tcp/1911 target
+  fox_port: 1911
+  fox_timeout_sec: 2.0
   username_env: "NIAGARA_USER"
   password_env: "NIAGARA_PASS"
   session_env: "NIAGARA_SESSION"

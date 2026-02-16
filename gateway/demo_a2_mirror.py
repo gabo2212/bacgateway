@@ -46,6 +46,9 @@ class NiagaraConfig:
     password_env: str
     session_env: str
     timeout_sec: float
+    fox_host: str | None
+    fox_port: int
+    fox_timeout_sec: float
     login_options: NiagaraLoginOptions
 
 
@@ -336,13 +339,7 @@ class MirrorService:
             if root in seen_roots:
                 continue
             seen_roots.add(root)
-            candidates.extend(
-                [
-                    f"{root}/override({value_text})",
-                    f"{root}/set({value_text})",
-                    f"{root}/emergencyOverride({value_text})",
-                ]
-            )
+            candidates.append(f"{root}/override({value_text})")
 
         deduped: list[str] = []
         seen: set[str] = set()
@@ -807,9 +804,6 @@ class MirrorService:
         if not (
             path_l.endswith("/proxyext/writevalue")
             or re.search(r"/in\d+$", path_l) is not None
-            or path_l.endswith("/set")
-            or path_l.endswith("/override")
-            or path_l.endswith("/emergencyoverride")
         ):
             return None, None
 
@@ -1226,6 +1220,13 @@ def load_demo_config(path: str | Path) -> DemoA2Config:
         password_env=str(raw_niagara.get("password_env", "NIAGARA_PASS")),
         session_env=str(raw_niagara.get("session_env", "NIAGARA_SESSION")),
         timeout_sec=float(raw_niagara.get("timeout_sec", 10.0)),
+        fox_host=(
+            str(raw_niagara.get("fox_host")).strip()
+            if raw_niagara.get("fox_host") is not None
+            else None
+        ),
+        fox_port=int(raw_niagara.get("fox_port", 1911)),
+        fox_timeout_sec=float(raw_niagara.get("fox_timeout_sec", 2.0)),
         login_options=login_options,
     )
     ord_cfg = OrdConfig(
@@ -1267,6 +1268,13 @@ def _build_client(cfg: DemoA2Config) -> NiagaraClient:
     username = os.getenv(cfg.niagara.username_env)
     password = os.getenv(cfg.niagara.password_env)
     session_cookie = os.getenv(cfg.niagara.session_env)
+    fox_host = cfg.niagara.fox_host or cfg.niagara.host.split(":", 1)[0]
+    logger.info(
+        "Niagara FOX target host=%s port=%s timeout_sec=%.2f",
+        fox_host,
+        cfg.niagara.fox_port,
+        cfg.niagara.fox_timeout_sec,
+    )
     if session_cookie:
         logger.info("Using Niagara session cookie injection mode from %s", cfg.niagara.session_env)
     elif not username or not password:
@@ -1283,6 +1291,9 @@ def _build_client(cfg: DemoA2Config) -> NiagaraClient:
         password=password,
         session_cookie=session_cookie,
         timeout_sec=cfg.niagara.timeout_sec,
+        fox_host=cfg.niagara.fox_host,
+        fox_port=cfg.niagara.fox_port,
+        fox_timeout_sec=cfg.niagara.fox_timeout_sec,
         login_options=cfg.niagara.login_options,
         probe_ord_path=cfg.ord.room_temp_out,
     )

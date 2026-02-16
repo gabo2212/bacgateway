@@ -416,12 +416,22 @@ class NiagaraClient:
         timeout_sec: float = 10.0,
         login_options: NiagaraLoginOptions | None = None,
         probe_ord_path: str | None = None,
+        fox_host: str | None = None,
+        fox_port: int = _FOX_DEFAULT_PORT,
+        fox_timeout_sec: float | None = None,
     ) -> None:
         self.host = host.strip()
         self.scheme = scheme.strip()
         self.username = username
         self.password = password
         self.timeout_sec = float(timeout_sec)
+        self.fox_host = fox_host.strip() if isinstance(fox_host, str) and fox_host.strip() else None
+        self.fox_port = int(fox_port)
+        self.fox_timeout_sec = (
+            float(fox_timeout_sec)
+            if fox_timeout_sec is not None
+            else min(2.0, max(0.5, float(timeout_sec)))
+        )
         self.login_options = login_options or NiagaraLoginOptions()
         self._probe_ord_path = probe_ord_path
 
@@ -1277,7 +1287,7 @@ class NiagaraClient:
     def _resolve_fox_local_address(self, fox_host: str) -> str:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-                probe.connect((fox_host, _FOX_DEFAULT_PORT))
+                probe.connect((fox_host, int(self.fox_port)))
                 return probe.getsockname()[0]
         except Exception:
             return "127.0.0.1"
@@ -1322,12 +1332,21 @@ class NiagaraClient:
             )
         fox_value = float(numeric_arg) if numeric_arg is not None else None
 
-        fox_host = self._host_without_port()
+        fox_host = self.fox_host or self._host_without_port()
+        fox_port = int(self.fox_port)
         newline = "\n"
         hello_id = 1
         auth_id = 2
         broker_id = 3
         invoke_id = 4
+        connect_timeout = max(0.2, float(self.fox_timeout_sec))
+        logger.info(
+            "niagara_fox_invoke target=%s:%s timeout=%.2fs session_len=%s",
+            fox_host,
+            fox_port,
+            connect_timeout,
+            len(session_id),
+        )
 
         try:
             messages: list[str | bytes] = [
@@ -1360,7 +1379,6 @@ class NiagaraClient:
         recv_chunks: list[bytes] = []
         send_error: str | None = None
         recv_error: str | None = None
-        connect_timeout = max(1.0, float(self.timeout_sec))
 
         def drain_for(sock: socket.socket, seconds: float) -> bool:
             nonlocal recv_error
@@ -1383,7 +1401,7 @@ class NiagaraClient:
             return True
 
         try:
-            with socket.create_connection((fox_host, _FOX_DEFAULT_PORT), timeout=connect_timeout) as sock:
+            with socket.create_connection((fox_host, fox_port), timeout=connect_timeout) as sock:
                 for idx, message in enumerate(messages, start=1):
                     payload = message if isinstance(message, bytes) else message.encode("utf-8")
                     try:
