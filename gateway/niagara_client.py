@@ -768,6 +768,9 @@ class NiagaraClient:
                 response.status,
             )
             if 200 <= response.status < 300:
+                if self._is_unexpected_html_response(response):
+                    failure_bits.append(f"{label}:{response.status}:html")
+                    continue
                 return WriteResult(
                     ok=True,
                     status=response.status,
@@ -816,7 +819,11 @@ class NiagaraClient:
             ord_expression,
             post_response.status,
         )
-        if 200 <= post_response.status < 300 and not self._needs_login(post_response):
+        if (
+            200 <= post_response.status < 300
+            and not self._needs_login(post_response)
+            and not self._is_unexpected_html_response(post_response)
+        ):
             return WriteResult(
                 ok=True,
                 status=post_response.status,
@@ -837,7 +844,11 @@ class NiagaraClient:
             ord_expression,
             get_response.status,
         )
-        if 200 <= get_response.status < 300 and not self._needs_login(get_response):
+        if (
+            200 <= get_response.status < 300
+            and not self._needs_login(get_response)
+            and not self._is_unexpected_html_response(get_response)
+        ):
             return WriteResult(
                 ok=True,
                 status=get_response.status,
@@ -1339,6 +1350,24 @@ class NiagaraClient:
     def _is_obix_body(self, body: str) -> bool:
         body_l = body.lower()
         return any(marker in body_l for marker in _OBIX_MARKERS)
+
+    def _looks_like_html_document(self, body: str) -> bool:
+        body_l = body.lower()
+        if "<html" in body_l or "<!doctype html" in body_l:
+            return True
+        return False
+
+    def _is_unexpected_html_response(self, response: _Response) -> bool:
+        body = response.body
+        if not body.strip():
+            return False
+        if not self._looks_like_html_document(body):
+            return False
+        # Login pages are handled separately via _needs_login.
+        if self._looks_like_login_html(body):
+            return True
+        # For ORD write/action calls we expect oBIX XML or empty payloads, not full HTML pages.
+        return not self._is_obix_body(body)
 
     def _is_authenticated_obix_response(self, response: _Response) -> bool:
         return response.status == 200 and not self._needs_login(response) and self._is_obix_body(response.body)

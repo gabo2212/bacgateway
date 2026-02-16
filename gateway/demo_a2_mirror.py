@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -326,6 +327,12 @@ class MirrorService:
                     root = base_path[: -len(suffix)]
                     candidates.extend(
                         [
+                            f"{root}/proxyExt/writeValue",
+                            f"{root}/in8",
+                            f"{root}/in10",
+                            f"{root}/in16",
+                            f"{root}/writeValue",
+                            f"{root}/out",
                             f"{root}/set({value_text})",
                             f"{root}/set?actionArg={value_text}",
                             f"{root}/override({value_text})",
@@ -335,15 +342,8 @@ class MirrorService:
                             f"{root}/set",
                             f"{root}/override",
                             f"{root}/emergencyOverride",
-                            f"{root}/writeValue",
-                            f"{root}/proxyExt/writeValue",
-                            f"{root}/in8",
-                            f"{root}/in10",
-                            f"{root}/in16",
                         ]
                     )
-                    for idx in range(1, 17):
-                        candidates.append(f"{root}/in{idx}")
                     break
         candidates.append(primary_set)
 
@@ -577,13 +577,10 @@ class MirrorService:
                 status=None,
             )
 
-        ord_set = self.ord_set_for_point(point)
         previous_value = self._good_values.get(point)
         if previous_value is None:
             previous_value = self.state.current_point(point)
-        result: WriteResult | None = None
         path_errors: list[str] = []
-        confirmed_path: str | None = None
         for ord_path in self._write_path_candidates(point, value):
             try:
                 path_l = ord_path.lower()
@@ -616,30 +613,66 @@ class MirrorService:
                     sleep_sec=0.5,
                 )
                 if confirm_error is None:
-                    result = attempt
-                    confirmed_path = ord_path
                     applied_value = confirmed_value if confirmed_value is not None else value
-                    self._last_write_mono[point] = now
-                    self._good_values[point] = applied_value
-                    self.object_for_point(point).presentValue = applied_value
-                    self.state.update_point(point, applied_value)
-                    self.state.set_last_write(
+                    return self._complete_successful_write(
                         point=point,
-                        value=applied_value,
-                        ok=True,
-                        status=attempt.status,
-                        error=None,
+                        requested_value=value,
+                        applied_value=applied_value,
+                        now=now,
+                        attempt=attempt,
+                        path=ord_path,
                     )
-                    logger.info(
-                        "Niagara write ok point=%s value=%s status=%s path=%s",
+
+                execute_ord = await self._trigger_proxy_execute_if_applicable(ord_path)
+                if execute_ord is not None:
+                    confirmed_value, confirm_error = await self._confirm_write_applied(
                         point,
-                        applied_value,
-                        attempt.status,
-                        confirmed_path,
+                        value,
+                        focus_path=ord_path,
+                        attempts=12,
+                        sleep_sec=0.5,
                     )
-                    return WriteOutcome(ok=True, error_code=None, message=None, status=attempt.status)
+                    if confirm_error is None:
+                        applied_value = confirmed_value if confirmed_value is not None else value
+                        return self._complete_successful_write(
+                            point=point,
+                            requested_value=value,
+                            applied_value=applied_value,
+                            now=now,
+                            attempt=attempt,
+                            path=ord_path,
+                            context=f"after proxy execute {execute_ord}",
+                        )
+
+                if self._is_deferred_write_candidate(ord_path):
+                    logger.info(
+                        "Niagara write pending confirmation point=%s path=%s status=%s; extending confirmation window",
+                        point,
+                        ord_path,
+                        attempt.status,
+                    )
+                    confirmed_value, confirm_error = await self._confirm_write_applied(
+                        point,
+                        value,
+                        focus_path=ord_path,
+                        attempts=90,
+                        sleep_sec=1.0,
+                    )
+                    if confirm_error is None:
+                        applied_value = confirmed_value if confirmed_value is not None else value
+                        return self._complete_successful_write(
+                            point=point,
+                            requested_value=value,
+                            applied_value=applied_value,
+                            now=now,
+                            attempt=attempt,
+                            path=ord_path,
+                            context="after extended confirmation window",
+                        )
+
                 err = (
-                    f"accepted-but-unconfirmed on {ord_path}: {confirm_error}"
+                    f"accepted-but-unconfirmed on {ord_path} status={attempt.status}: "
+                    f"{confirm_error}"
                 )
                 path_errors.append(err)
                 continue
@@ -677,7 +710,9 @@ class MirrorService:
         ord_out = self.ord_out_for_point(point)
         read_paths = [ord_out]
         if focus_path:
-            read_paths.insert(0, focus_path)
+            normalized_focus = focus_path.split("?", 1)[0]
+            normalized_focus = re.sub(r"/(set|override|emergencyOverride)\([^)]*\)$", "", normalized_focus)
+            read_paths.insert(0, normalized_focus)
         for suffix in ("/set", "/out"):
             if ord_out.endswith(suffix):
                 root = ord_out[: -len(suffix)]
@@ -685,25 +720,13 @@ class MirrorService:
                     [
                         f"{root}/writeValue",
                         f"{root}/proxyExt/writeValue",
-                        f"{root}/in1",
-                        f"{root}/in2",
-                        f"{root}/in3",
-                        f"{root}/in4",
-                        f"{root}/in5",
-                        f"{root}/in6",
-                        f"{root}/in7",
                         f"{root}/in8",
-                        f"{root}/in9",
                         f"{root}/in10",
-                        f"{root}/in11",
-                        f"{root}/in12",
-                        f"{root}/in13",
-                        f"{root}/in14",
-                        f"{root}/in15",
                         f"{root}/in16",
+                        f"{root}/out",
+                        f"{root}/proxyExt/in8",
                         f"{root}/proxyExt/in10",
                         f"{root}/proxyExt/in16",
-                        f"{root}/proxyExt/in8",
                     ]
                 )
                 break
@@ -735,6 +758,98 @@ class MirrorService:
         if last_error is None:
             last_error = "Write confirmation failed"
         return last_observed, last_error
+
+    def _is_deferred_write_candidate(self, ord_path: str) -> bool:
+        base = ord_path.split("?", 1)[0].lower()
+        if base.endswith("/proxyext/writevalue"):
+            return True
+        if re.search(r"/in(8|10|16)$", base) is not None:
+            return True
+        return False
+
+    def _proxy_execute_candidates(self, ord_path: str) -> list[str]:
+        base = ord_path.split("?", 1)[0]
+        base = re.sub(r"/(set|override|emergencyOverride)\([^)]*\)$", "", base)
+        base = re.sub(r"/(set|override|emergencyOverride)$", "", base)
+        base = re.sub(r"/proxyExt/in\d+$", "", base)
+        base = re.sub(r"/in\d+$", "", base)
+        for suffix in ("/proxyExt/writeValue", "/writeValue", "/out"):
+            if base.endswith(suffix):
+                base = base[: -len(suffix)]
+                break
+        if not base:
+            return []
+        candidates = [f"{base}/proxyExt/execute()", f"{base}/proxyExt/execute"]
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            deduped.append(candidate)
+        return deduped
+
+    async def _trigger_proxy_execute_if_applicable(self, ord_path: str) -> str | None:
+        path_l = ord_path.lower()
+        if not (
+            path_l.endswith("/proxyext/writevalue")
+            or re.search(r"/in\d+$", path_l) is not None
+            or path_l.endswith("/set")
+            or path_l.endswith("/override")
+            or path_l.endswith("/emergencyoverride")
+        ):
+            return None
+
+        for execute_ord in self._proxy_execute_candidates(ord_path):
+            try:
+                result = await asyncio.to_thread(self.client.invoke_action_ord, execute_ord)
+            except Exception as exc:  # noqa: BLE001 - keep write flow resilient
+                logger.info("Niagara proxy execute raised ord=%s error=%s", execute_ord, exc)
+                continue
+            if result.ok:
+                logger.info("Niagara proxy execute ok ord=%s", execute_ord)
+                return execute_ord
+            logger.info(
+                "Niagara proxy execute failed ord=%s status=%s error=%s",
+                execute_ord,
+                result.status,
+                result.error,
+            )
+        return None
+
+    def _complete_successful_write(
+        self,
+        *,
+        point: PointName,
+        requested_value: float,
+        applied_value: float,
+        now: float,
+        attempt: WriteResult,
+        path: str,
+        context: str | None = None,
+    ) -> WriteOutcome:
+        self._last_write_mono[point] = now
+        self._good_values[point] = applied_value
+        self.object_for_point(point).presentValue = applied_value
+        self.state.update_point(point, applied_value)
+        self.state.set_last_write(
+            point=point,
+            value=applied_value,
+            ok=True,
+            status=attempt.status,
+            error=None,
+        )
+        context_suffix = f" ({context})" if context else ""
+        logger.info(
+            "Niagara write ok%s point=%s requested=%s applied=%s status=%s path=%s",
+            context_suffix,
+            point,
+            requested_value,
+            applied_value,
+            attempt.status,
+            path,
+        )
+        return WriteOutcome(ok=True, error_code=None, message=None, status=attempt.status)
 
     def _revert_point(self, point: PointName, value: float | None) -> None:
         if value is None:
