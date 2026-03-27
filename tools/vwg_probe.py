@@ -3,9 +3,15 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
+from pathlib import Path
 from typing import Any
 
 import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from gateway.radio.session import (
     RadioSession,
@@ -14,6 +20,7 @@ from gateway.radio.session import (
     CMD_READ_REQUEST,
 )
 from gateway.radio.vwg_serial import VwgSerialTransport
+from gateway import codec as gcodec
 from proto import codec
 
 logging.basicConfig(level=logging.INFO)
@@ -42,49 +49,9 @@ def _format_hex(data: bytes) -> str:
     return data.hex().upper()
 
 
-def _build_frame(
-    msg_type: int,
-    cmd_type: int,
-    comm_addr: int,
-    trans_seq: int,
-    payload: bytes = b"",
-) -> bytes:
-    frame = bytearray()
-    frame.append(0x40)
-    frame.append(0x00)
-    frame.extend(msg_type.to_bytes(2, "big"))
-    frame.append(cmd_type & 0xFF)
-    frame.append(comm_addr & 0xFF)
-    frame.append(trans_seq & 0xFF)
-    frame.extend(payload)
-    frame.append(sum(frame[2:]) & 0xFF)
-    frame[1] = len(frame) - 2
-    return bytes(frame)
-
-
-def _parse_identify_payload(payload: bytes) -> dict[str, Any]:
-    if len(payload) != 13:
-        raise ValueError("identify payload must be 13 bytes")
-    firmware_maj = payload[0]
-    firmware_min = payload[1]
-    zigbee_addr = int.from_bytes(payload[2:4], "big")
-    ieee_addr = payload[4:12].hex().upper()
-    chip_rev = payload[12]
-    return {
-        "firmware_maj": firmware_maj,
-        "firmware_min": firmware_min,
-        "zigbee_addr": f"0x{zigbee_addr:04X}",
-        "ieee_addr": f"0x{ieee_addr}",
-        "chip_rev": chip_rev,
-    }
-
-
-def _parse_network_config_payload(payload: bytes) -> dict[str, Any]:
-    if len(payload) != 3:
-        raise ValueError("network config payload must be 3 bytes")
-    pan_id = int.from_bytes(payload[0:2], "big")
-    channel = payload[2]
-    return {"pan_id": pan_id, "channel": channel}
+_build_frame = gcodec.build_frame
+_parse_identify_payload = gcodec.parse_identify_payload
+_parse_network_config_payload = gcodec.parse_network_config_payload
 
 
 def _load_radio_defaults(path: str) -> dict[str, Any]:
@@ -132,6 +99,28 @@ def main() -> None:
 
     subparsers.add_parser("identify", help="Read coordinator identify info")
     subparsers.add_parser("netcfg", help="Read network configuration")
+
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="Scan a range of comm_addrs to discover responding thermostats",
+    )
+    scan_parser.add_argument(
+        "--start",
+        type=lambda x: int(x, 0),
+        default=1,
+        help="First comm_addr to probe (default: 1)",
+    )
+    scan_parser.add_argument(
+        "--end",
+        type=lambda x: int(x, 0),
+        default=50,
+        help="Last comm_addr to probe inclusive (default: 50)",
+    )
+    scan_parser.add_argument(
+        "--point",
+        default="0x1000",
+        help="Point address to read for presence detection (default: 0x1000 Room Temperature)",
+    )
 
     read_parser = subparsers.add_parser("read", help="Read a point")
     read_parser.add_argument("--comm-addr", required=True)
@@ -184,6 +173,30 @@ def main() -> None:
             info = _parse_network_config_payload(response.frame.payload)
             _print_response(response, request)
             print("Info:", info)
+            return
+
+        if args.command == "scan":
+            point_addr = _parse_int(args.point)
+            found: list[int] = []
+            total = args.end - args.start + 1
+            for comm_addr in range(args.start, args.end + 1):
+                print(
+                    f"  Probing comm_addr={comm_addr} ({comm_addr - args.start + 1}/{total})...",
+                    end="",
+                    flush=True,
+                )
+                try:
+                    result = session.read_point(comm_addr, point_addr)
+                    found.append(comm_addr)
+                    print(f" FOUND  value={result.value}  lq={result.response.frame.link_quality}")
+                except Exception as exc:
+                    print(f" no response ({type(exc).__name__})")
+            print()
+            if found:
+                print(f"Thermostats found at comm_addrs: {found}")
+                print("Update points.yaml with the correct comm_addr value.")
+            else:
+                print("No thermostats responded in the scanned range.")
             return
 
         comm_addr = _parse_int(args.comm_addr)

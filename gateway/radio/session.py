@@ -8,46 +8,26 @@ from typing import Any, Optional
 
 from .base import FrameTransport, RateLimiter
 from proto import codec
+from gateway import codec as gcodec
 
 LOGGER = logging.getLogger(__name__)
 
-START_REQUEST = 0x40
-START_RESPONSE = 0x3C
+# Re-export constants from canonical source so existing importers keep working.
+START_REQUEST = gcodec.START_REQUEST
+START_RESPONSE = gcodec.START_RESPONSE
 
-CMD_READ_REQUEST = 0
-CMD_READ_RESPONSE = 1
-CMD_WRITE_REQUEST = 2
-CMD_WRITE_RESPONSE = 3
+CMD_READ_REQUEST = gcodec.CMD_READ_REQUEST
+CMD_READ_RESPONSE = gcodec.CMD_READ_RESPONSE
+CMD_WRITE_REQUEST = gcodec.CMD_WRITE_REQUEST
+CMD_WRITE_RESPONSE = gcodec.CMD_WRITE_RESPONSE
 
-RF_MODULE_START_NETWORK = 0x0F00
-RF_MODULE_CONFIGURE_NETWORK = 0x0F01
-RF_MODULE_DUPLICATE_COMM = 0x0F02
-RF_MODULE_IDENTIFY = 0x0F03
+RF_MODULE_START_NETWORK = gcodec.RF_MODULE_START_NETWORK
+RF_MODULE_CONFIGURE_NETWORK = gcodec.RF_MODULE_CONFIGURE_NETWORK
+RF_MODULE_DUPLICATE_COMM = gcodec.RF_MODULE_DUPLICATE_COMM
+RF_MODULE_IDENTIFY = gcodec.RF_MODULE_IDENTIFY
 
-STATUS_LABELS = {
-    0: "No error",
-    1: "Network parameters not set",
-    2: "Object not supported",
-    3: "Out of memory",
-    4: "Parameters out of range",
-    5: "Invalid COMM address",
-    6: "Invalid Command Type",
-    7: "Thermostat not identified",
-    8: "Thermostat not added to network",
-    9: "Thermostat address not registered",
-}
-
-LINK_QUALITY_LOOKUP = [
-    5, 8, 10, 14, 21, 25, 29, 33, 36, 38, 40, 42, 44, 46, 48, 49, 50, 52,
-    53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 62, 63, 64, 65, 65, 66, 67, 67,
-    68, 68, 69, 70, 70, 71, 71, 72, 72, 73, 73, 74, 74, 74, 75, 75, 76, 76,
-    77, 77, 77, 78, 78, 78, 79, 79, 80, 80, 80, 81, 81, 81, 82, 82, 82, 82,
-    83, 83, 83, 84, 84, 84, 84, 85, 85, 85, 86, 86, 86, 86, 87, 87, 87, 87,
-    88, 88, 88, 88, 88, 89, 89, 89, 89, 90, 90, 90, 90, 90, 91, 91, 91, 91,
-    91, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 95,
-    95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 97, 97, 97, 97, 97, 97, 97,
-    98, 98, 98, 98, 98, 98, 99, 99, 99, 99, 99, 99, 99, 100,
-]
+# Use the canonical ParsedFrame from gateway.codec.
+ParsedFrame = gcodec.ParsedFrame
 
 
 class RadioError(RuntimeError):
@@ -63,21 +43,6 @@ class RadioStatusError(RadioError):
         super().__init__(f"Radio returned status {status_code}: {status_label}")
         self.status_code = status_code
         self.status_label = status_label
-
-
-@dataclass
-class ParsedFrame:
-    raw: bytes
-    msg_type: int
-    cmd_type: int
-    comm_addr: int
-    trans_seq: int
-    status: Optional[int]
-    payload: bytes
-    link_quality_raw: Optional[int]
-    link_quality: Optional[int]
-    crc_ok: bool
-    length_ok: bool
 
 
 @dataclass
@@ -97,64 +62,6 @@ class PendingRequest:
     key: tuple[int, int, int, int]
     event: threading.Event
     response: Optional[ParsedFrame] = None
-
-
-def _status_label(code: Optional[int]) -> Optional[str]:
-    if code is None:
-        return None
-    return STATUS_LABELS.get(code, f"Unspecified error: {code}")
-
-
-def _link_quality(raw: Optional[int]) -> Optional[int]:
-    if raw is None:
-        return None
-    idx = min(raw, len(LINK_QUALITY_LOOKUP) - 1)
-    return LINK_QUALITY_LOOKUP[idx]
-
-
-def _build_frame(
-    msg_type: int,
-    cmd_type: int,
-    comm_addr: int,
-    trans_seq: int,
-    payload: bytes = b"",
-) -> bytes:
-    frame = bytearray()
-    frame.append(START_REQUEST)
-    frame.append(0x00)
-    frame.extend(msg_type.to_bytes(2, "big"))
-    frame.append(cmd_type & 0xFF)
-    frame.append(comm_addr & 0xFF)
-    frame.append(trans_seq & 0xFF)
-    frame.extend(payload)
-    frame.append(sum(frame[2:]) & 0xFF)
-    frame[1] = len(frame) - 2
-    return bytes(frame)
-
-
-def _parse_identify_payload(payload: bytes) -> dict[str, Any]:
-    if len(payload) != 13:
-        raise ValueError("identify payload must be 13 bytes")
-    firmware_maj = payload[0]
-    firmware_min = payload[1]
-    zigbee_addr = int.from_bytes(payload[2:4], "big")
-    ieee_addr = payload[4:12].hex().upper()
-    chip_rev = payload[12]
-    return {
-        "firmware_maj": firmware_maj,
-        "firmware_min": firmware_min,
-        "zigbee_addr": f"0x{zigbee_addr:04X}",
-        "ieee_addr": f"0x{ieee_addr}",
-        "chip_rev": chip_rev,
-    }
-
-
-def _parse_network_config_payload(payload: bytes) -> dict[str, Any]:
-    if len(payload) != 3:
-        raise ValueError("network config payload must be 3 bytes")
-    pan_id = int.from_bytes(payload[0:2], "big")
-    channel = payload[2]
-    return {"pan_id": pan_id, "channel": channel}
 
 
 class RadioSession:
@@ -222,7 +129,7 @@ class RadioSession:
 
     def identify_raw(self) -> RadioResponse:
         trans_seq = self._next_trans_seq()
-        frame = _build_frame(RF_MODULE_IDENTIFY, CMD_READ_REQUEST, 0, trans_seq)
+        frame = gcodec.build_frame(RF_MODULE_IDENTIFY, CMD_READ_REQUEST, 0, trans_seq)
         return self._send_request(
             frame,
             expect_cmd=CMD_READ_RESPONSE,
@@ -233,13 +140,13 @@ class RadioSession:
 
     def identify(self) -> dict[str, Any]:
         response = self.identify_raw()
-        payload_info = _parse_identify_payload(response.frame.payload)
+        payload_info = gcodec.parse_identify_payload(response.frame.payload)
         payload_info.update(self._response_metadata(response))
         return payload_info
 
     def read_network_config_raw(self) -> RadioResponse:
         trans_seq = self._next_trans_seq()
-        frame = _build_frame(RF_MODULE_CONFIGURE_NETWORK, CMD_READ_REQUEST, 0, trans_seq)
+        frame = gcodec.build_frame(RF_MODULE_CONFIGURE_NETWORK, CMD_READ_REQUEST, 0, trans_seq)
         return self._send_request(
             frame,
             expect_cmd=CMD_READ_RESPONSE,
@@ -250,14 +157,14 @@ class RadioSession:
 
     def read_network_config(self) -> dict[str, Any]:
         response = self.read_network_config_raw()
-        payload_info = _parse_network_config_payload(response.frame.payload)
+        payload_info = gcodec.parse_network_config_payload(response.frame.payload)
         payload_info.update(self._response_metadata(response))
         return payload_info
 
     def configure_network(self, pan_id: int, channel: int) -> RadioResponse:
         trans_seq = self._next_trans_seq()
         payload = pan_id.to_bytes(2, "big") + bytes([channel & 0xFF])
-        frame = _build_frame(
+        frame = gcodec.build_frame(
             RF_MODULE_CONFIGURE_NETWORK, CMD_WRITE_REQUEST, 0, trans_seq, payload
         )
         return self._send_request(
@@ -270,7 +177,7 @@ class RadioSession:
 
     def start_network(self) -> RadioResponse:
         trans_seq = self._next_trans_seq()
-        frame = _build_frame(RF_MODULE_START_NETWORK, CMD_WRITE_REQUEST, 0, trans_seq)
+        frame = gcodec.build_frame(RF_MODULE_START_NETWORK, CMD_WRITE_REQUEST, 0, trans_seq)
         return self._send_request(
             frame,
             expect_cmd=CMD_WRITE_RESPONSE,
@@ -309,7 +216,7 @@ class RadioSession:
         trans_seq = self._next_trans_seq()
         if logical_name:
             payload = codec.encode_point_value_with_name(point_addr, value, logical_name)
-            frame = _build_frame(
+            frame = gcodec.build_frame(
                 point_addr, CMD_WRITE_REQUEST, comm_addr, trans_seq, payload
             )
         else:
@@ -361,7 +268,8 @@ class RadioSession:
             if pending.event.wait(timeout=timeout):
                 assert pending.response is not None
                 response = RadioResponse(
-                    frame=pending.response, status_label=_status_label(pending.response.status)
+                    frame=pending.response,
+                    status_label=gcodec.status_label(pending.response.status),
                 )
                 if pending.response.status not in (None, 0):
                     raise RadioStatusError(
@@ -398,21 +306,7 @@ class RadioSession:
         self._log_frame("tx", self._parse_frame(frame))
 
     def _parse_frame(self, frame: bytes) -> ParsedFrame:
-        length_ok = len(frame) >= 2 and frame[1] == len(frame) - 2
-        parsed = codec.parse_received_frame(frame)
-        return ParsedFrame(
-            raw=frame,
-            msg_type=parsed["msg_type"],
-            cmd_type=parsed["cmd_type"],
-            comm_addr=parsed["comm_addr"],
-            trans_seq=parsed["trans_seq"],
-            status=parsed["status"],
-            payload=parsed["payload"],
-            link_quality_raw=parsed["link_quality"],
-            link_quality=_link_quality(parsed["link_quality"]),
-            crc_ok=parsed["crc_ok"],
-            length_ok=length_ok,
-        )
+        return gcodec.parse_frame(frame)
 
     def _log_frame(self, direction: str, parsed: ParsedFrame) -> None:
         key = f"{direction}:{parsed.msg_type:04x}:{parsed.cmd_type}"

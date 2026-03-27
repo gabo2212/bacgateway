@@ -10,6 +10,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
+# Raw frame helpers are now canonical in gateway.codec; delegate to avoid duplication.
+from gateway import codec as _gcodec
+
 ROOT = Path(__file__).resolve().parents[1]
 POINTS_CSV = ROOT / "spec" / "points_catalog.csv"
 ENUMS_YAML = ROOT / "spec" / "enums.yaml"
@@ -135,76 +138,38 @@ def _to_signed(raw: int) -> int:
 
 
 def build_read_point(comm_addr: int, point_addr: int, trans_seq: int) -> bytes:
-    frame = bytearray()
-    frame.append(0x40)
-    frame.append(0x00)
-    frame.extend(point_addr.to_bytes(2, "big"))
-    frame.append(0x00)  # READ_REQUEST
-    frame.append(comm_addr & 0xFF)
-    frame.append(trans_seq & 0xFF)
-    crc = sum(frame[2:]) & 0xFF
-    frame.append(crc)
-    frame[1] = len(frame) - 2
-    return bytes(frame)
+    """Build a READ_REQUEST frame for a point. Delegates to gateway.codec."""
+    return _gcodec.build_frame(
+        point_addr, _gcodec.CMD_READ_REQUEST, comm_addr, trans_seq
+    )
 
 
 def build_write_point(
     comm_addr: int, point_addr: int, value: Any, trans_seq: int
 ) -> bytes:
+    """Build a WRITE_REQUEST frame for a point. Delegates to gateway.codec."""
     payload = encode_point_value(point_addr, value)
-    frame = bytearray()
-    frame.append(0x40)
-    frame.append(0x00)
-    frame.extend(point_addr.to_bytes(2, "big"))
-    frame.append(0x02)  # WRITE_REQUEST
-    frame.append(comm_addr & 0xFF)
-    frame.append(trans_seq & 0xFF)
-    frame.extend(payload)
-    crc = sum(frame[2:]) & 0xFF
-    frame.append(crc)
-    frame[1] = len(frame) - 2
-    return bytes(frame)
+    return _gcodec.build_frame(
+        point_addr, _gcodec.CMD_WRITE_REQUEST, comm_addr, trans_seq, payload
+    )
 
 
 def parse_received_frame(frame: bytes) -> dict[str, Any]:
-    if len(frame) < 7:
-        raise ValueError("Frame too short")
-    start = frame[0]
-    if start not in (0x40, 0x3C):
-        raise ValueError("Unexpected start byte")
-    msg_type = (frame[2] << 8) | frame[3]
-    cmd_type = frame[4]
-    comm_addr = frame[5]
-    trans_seq = frame[6]
-    idx = 7
-    status = None
-    if cmd_type in (1, 3):
-        if idx >= len(frame):
-            raise ValueError("Frame missing status byte")
-        status = frame[idx]
-        idx += 1
+    """Parse a raw radio frame. Delegates to gateway.codec.parse_frame.
 
-    if start == 0x3C:
-        if len(frame) < idx + 2:
-            raise ValueError("Frame missing link quality or CRC")
-        payload_end = len(frame) - 2
-        link_quality = frame[-2]
-    else:
-        payload_end = len(frame) - 1
-        link_quality = None
-
-    payload = frame[idx:payload_end]
-    crc = frame[-1]
-    crc_ok = (sum(frame[2:-1]) & 0xFF) == crc
+    Returns a dict with the same keys as before for backward compatibility.
+    Raises ValueError for frames that are too short or have an unknown start byte.
+    """
+    pf = _gcodec.parse_frame(frame)
     return {
-        "msg_type": msg_type,
-        "cmd_type": cmd_type,
-        "comm_addr": comm_addr,
-        "trans_seq": trans_seq,
-        "status": status,
-        "payload": payload,
-        "link_quality": link_quality,
-        "crc_ok": crc_ok,
+        "msg_type": pf.msg_type,
+        "cmd_type": pf.cmd_type,
+        "comm_addr": pf.comm_addr,
+        "trans_seq": pf.trans_seq,
+        "status": pf.status,
+        "payload": pf.payload,
+        "link_quality": pf.link_quality_raw,
+        "crc_ok": pf.crc_ok,
     }
 
 
@@ -270,8 +235,6 @@ def _encode_raw_value(spec: PointSpec, value: Any) -> int:
 
     return int(round(raw_val))
 
-    return int(round(raw_val))
-
 
 def encode_point_value(point_addr: int, value: Any) -> bytes:
     spec = _choose_spec(point_addr)
@@ -310,16 +273,6 @@ def validate_point_value(
     elif spec.value_type != "enum":
         if not isinstance(value, (int, float)):
             raise ValueError(f"Non-numeric value for 0x{point_addr:04X}: {value}")
-
-    raw = _encode_raw_value(spec, value)
-    if spec.min_raw is not None and raw < spec.min_raw:
-        raise ValueError(
-            f"Value below min_raw for 0x{point_addr:04X}: {raw} < {spec.min_raw}"
-        )
-    if spec.max_raw is not None and raw > spec.max_raw:
-        raise ValueError(
-            f"Value above max_raw for 0x{point_addr:04X}: {raw} > {spec.max_raw}"
-        )
 
     raw = _encode_raw_value(spec, value)
     if spec.min_raw is not None and raw < spec.min_raw:
