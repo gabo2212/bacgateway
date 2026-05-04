@@ -1,0 +1,504 @@
+{
+  "families": {
+    "0x08": {
+      "enum_codes": [
+        "0x3e",
+        "0x3f",
+        "0x40",
+        "0xd3",
+        "0xd7",
+        "0xdd"
+      ],
+      "report_to_write": {
+        "0x0a": "0x49",
+        "0x2d": "0x4b",
+        "0x45": "0x4c",
+        "0xc4": "0x35",
+        "0xc7": "0x36",
+        "0xca": "0x37",
+        "0xcd": "0x3c",
+        "0xd1": "0x3d",
+        "0xd3": "0x3e",
+        "0xd7": "0x3f",
+        "0xdd": "0x40"
+      }
+    },
+    "0x0a": {
+      "enum_codes": [
+        "0x2d",
+        "0xeb"
+      ],
+      "report_to_write": {
+        "0xc2": "0x29",
+        "0xca": "0x2a",
+        "0xd3": "0x2b",
+        "0xdd": "0x2c",
+        "0xeb": "0x2d"
+      }
+    }
+  },
+  "points": [
+    {
+      "family": "0x08",
+      "code": "0x07",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0x07_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0x09",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0x09_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0x0a",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0x0a_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0x0b",
+      "kind": "u8",
+      "label": "auto_0x08_0x0b_u8"
+    },
+    {
+      "family": "0x08",
+      "code": "0x0c",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0x0c_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0x2d",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0x2d_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0x35",
+      "kind": "analog_x10",
+      "label": "sp_0x35"
+    },
+    {
+      "family": "0x08",
+      "code": "0x36",
+      "kind": "analog_x10",
+      "label": "sp_0x36"
+    },
+    {
+      "family": "0x08",
+      "code": "0x37",
+      "kind": "analog_x10",
+      "label": "sp_0x37"
+    },
+    {
+      "family": "0x08",
+      "code": "0x3c",
+      "kind": "analog_x10",
+      "label": "sp_0x3c"
+    },
+    {
+      "family": "0x08",
+      "code": "0x3d",
+      "kind": "analog_x10",
+      "label": "sp_0x3d"
+    },
+    {
+      "family": "0x08",
+      "code": "0x3e",
+      "kind": "enum",
+      "label": "occ_0x3e"
+    },
+    {
+      "family": "0x08",
+      "code": "0x3f",
+      "kind": "enum",
+      "label": "occ_0x3f"
+    },
+    {
+      "family": "0x08",
+      "code": "0x40",
+      "kind": "enum",
+      "label": "occ_0x40"
+    },
+    {
+      "family": "0x08",
+      "code": "0x49",
+      "kind": "analog_x10",
+      "label": "occupied_heat_setpoint"
+    },
+    {
+      "family": "0x08",
+      "code": "0x4b",
+      "kind": "analog_x10",
+      "label": "occupied_cool_setpoint"
+    },
+    {
+      "family": "0x08",
+      "code": "0x4c",
+      "kind": "analog_x10",
+      "label": "heat_setpoint_candidate_2"
+    },
+    {
+      "family": "0x08",
+      "code": "0xc3",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xc3_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xc5",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xc5_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xc6",
+      "kind": "u8",
+      "label": "auto_0x08_0xc6_u8"
+    },
+    {
+      "family": "0x08",
+      "code": "0xc8",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xc8_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xc9",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xc9_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xcb",
+      "kind": "u8",
+      "label": "auto_0x08_0xcb_u8"
+    },
+    {
+      "family": "0x08",
+      "code": "0xcc",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xcc_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xce",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xce_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xcf",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xcf_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xd0",
+      "kind": "u8",
+      "label": "auto_0x08_0xd0_u8"
+    },
+    {
+      "family": "0x08",
+      "code": "0xd2",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xd2_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xd4",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xd4_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xd5",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xd5_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xd6",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xd6_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xd8",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xd8_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xd9",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xd9_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xda",
+      "kind": "u8",
+      "label": "auto_0x08_0xda_u8"
+    },
+    {
+      "family": "0x08",
+      "code": "0xdb",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xdb_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xdc",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xdc_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xde",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xde_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xdf",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xdf_analog_x10"
+    },
+    {
+      "family": "0x08",
+      "code": "0xe0",
+      "kind": "analog_x10",
+      "label": "auto_0x08_0xe0_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0x29",
+      "kind": "analog_x10",
+      "label": "sp_0x29"
+    },
+    {
+      "family": "0x0a",
+      "code": "0x2a",
+      "kind": "analog_x10",
+      "label": "sp_0x2a"
+    },
+    {
+      "family": "0x0a",
+      "code": "0x2b",
+      "kind": "analog_x10",
+      "label": "sp_0x2b"
+    },
+    {
+      "family": "0x0a",
+      "code": "0x2c",
+      "kind": "analog_x10",
+      "label": "sp_0x2c"
+    },
+    {
+      "family": "0x0a",
+      "code": "0x2d",
+      "kind": "enum",
+      "label": "occ_0x2d"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xb7",
+      "kind": "u8",
+      "label": "auto_0x0a_0xb7_u8"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xba",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xba_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xbb",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xbb_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xbc",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xbc_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xbe",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xbe_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xc1",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xc1_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xc3",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xc3_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xc5",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xc5_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xc6",
+      "kind": "u8",
+      "label": "auto_0x0a_0xc6_u8"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xc9",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xc9_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xcb",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xcb_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xcd",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xcd_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xd0",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xd0_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xd1",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xd1_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xd4",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xd4_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xd5",
+      "kind": "u8",
+      "label": "auto_0x0a_0xd5_u8"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xd8",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xd8_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xd9",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xd9_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xdb",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xdb_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xdc",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xdc_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xde",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xde_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xe1",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xe1_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xe2",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xe2_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xe4",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xe4_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xe7",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xe7_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xe8",
+      "kind": "u8",
+      "label": "auto_0x0a_0xe8_u8"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xe9",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xe9_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xec",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xec_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xed",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xed_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xf0",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xf0_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xf1",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xf1_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xf2",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xf2_analog_x10"
+    },
+    {
+      "family": "0x0a",
+      "code": "0xf3",
+      "kind": "analog_x10",
+      "label": "auto_0x0a_0xf3_analog_x10"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+# Reference manifest for OTA batch tooling.
+#
+# Field reference:
+#   capture_id     (string, required) - unique short identifier; used by
+#                   tools/ota_action_windows.py --capture <id>
+#   pcap           (string, required) - path to .pcapng, relative to repo
+#                   root or absolute
+#   action_log     (string, optional) - path to a .txt action log with
+#                   mm:ss timestamps relative to capture start
+#   device_label   (string, optional) - human label for the focus device
+#   short_addr     (string, optional) - device short addr, e.g. "0x0001"
+#   eui64          (string, optional) - device EUI-64, e.g. "00:11:22:..."
+#   task_type      (string, optional) - one of:
+#                     idle
+#                     ping
+#                     identify
+#                     point_viewer
+#                     setpoint_write
+#                     occupancy_write
+#                     outdoor_temp_override
+#                     mode_fan
+#                     unknown
+#   notes          (string, optional) - free text
+
+captures:
+  - capture_id: pass4_rtc
+    pcap: captures/pass4_rtc.pcapng
+    action_log: captures/raw/pass4_rtc.txt
+    device_label: rtc_thermostat
+    short_addr: "0x143E"
+    task_type: setpoint_write
+    notes: |
+      Pass 4 RTC capture. Operator wrote occupied_heat_setpoint multiple
+      times to confirm 0x49 write -> 0x0A report mapping.
+
+  - capture_id: pass4_device2
+    pcap: captures/pass4_device2.pcapng
+    action_log: captures/raw/pass4_device2.txt
+    device_label: device2_thermostat
+    short_addr: "0x0001"
+    task_type: occupancy_write
+    notes: Device 0x0001 occupancy override sequence.
+
+  - capture_id: exp1_rtc_A
+    pcap: captures/exp1_rtc_A.pcapng
+    short_addr: "0x143E"
+    task_type: idle
+    notes: Idle baseline before exp1 setpoint change.
+
+  - capture_id: exp1_rtc_B
+    pcap: captures/exp1_rtc_B.pcapng
+    short_addr: "0x143E"
+    task_type: setpoint_write
+    notes: After exp1 setpoint change.

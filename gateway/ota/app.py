@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, Optional
 
+from .pointmap import PointMap
 from .zigbee import ApsFrame
 
 LOGGER = logging.getLogger(__name__)
 
 Direction = Literal["gw->dev", "dev->gw"]
-Kind = Literal["identify_req", "identify_rsp", "analog_x10", "enum", "ack", "unknown"]
+Kind = Literal["identify_req", "identify_rsp", "analog_x10", "enum", "ack", "unknown", "u8"]
 Value = float | int
 
 PREFIX_TO_DEVICE_SHORT: dict[int, int] = {
@@ -17,35 +19,28 @@ PREFIX_TO_DEVICE_SHORT: dict[int, int] = {
     0x0A: 0x0001,
 }
 
-PREFIX_TO_WRITE_TO_REPORT: dict[int, dict[int, int]] = {
-    0x08: {
-        0x35: 0xC4,
-        0x36: 0xC7,
-        0x37: 0xCA,
-        0x3C: 0xCD,
-        0x3D: 0xD1,
-        0x3E: 0xD3,
-        0x3F: 0xD7,
-        0x40: 0xDD,
-    },
-    0x0A: {
-        0x29: 0xC2,
-        0x2A: 0xCA,
-        0x2B: 0xD3,
-        0x2C: 0xDD,
-        0x2D: 0xEB,
-    },
-}
-
-ENUM_CODE_SETS: dict[int, set[int]] = {
-    0x08: {0x3E, 0x3F, 0x40, 0xD3, 0xD7, 0xDD},
-    0x0A: {0x2D, 0xEB},
-}
-
-
 def _log_debug(event: str, **fields: object) -> None:
     if LOGGER.isEnabledFor(logging.DEBUG):
         LOGGER.debug(event, extra={"event": event, **fields})
+
+_DEFAULT_POINTMAP: Optional[PointMap] = None
+
+
+def _get_pointmap(override: Optional[PointMap] = None) -> PointMap:
+    if override is not None:
+        return override
+    global _DEFAULT_POINTMAP
+    if _DEFAULT_POINTMAP is None:
+        path = Path(__file__).with_name("pointmap.json")
+        _DEFAULT_POINTMAP = PointMap.from_json(path)
+    return _DEFAULT_POINTMAP
+
+
+def normalize_code(prefix: int | None, code: int | None) -> tuple[int | None, int | None]:
+    if prefix is None or code is None:
+        return prefix, code
+    point_map = _get_pointmap()
+    return prefix, point_map.canonicalize(prefix, code)
 
 
 @dataclass(frozen=True)
@@ -63,32 +58,62 @@ class OtaMsg:
     kind: Kind
     value: Optional[Value]
     raw_rest_hex: str
+    rest_len: int
+    ack_extra_hex: Optional[str]
+    label: Optional[str]
+    reason: Optional[str]
 
 
-def decode_cmd2_rest(rest: bytes) -> tuple[Optional[int], Optional[int], Kind, Optional[Value]]:
+def decode_cmd2_rest(
+    rest: bytes, point_map: Optional[PointMap] = None
+) -> tuple[Optional[int], Optional[int], Kind, Optional[Value]]:
+    point_map = _get_pointmap(point_map)
     prefix = rest[0] if len(rest) >= 1 else None
     code = rest[1] if len(rest) >= 2 else None
+    if prefix is not None and code is not None:
+        code = point_map.canonicalize(prefix, code)
+    if len(rest) == 3:
+        return prefix, code, "u8", int(rest[2])
     if len(rest) != 4:
         return prefix, code, "unknown", None
-    prefix = rest[0]
-    code = rest[1]
-    enum_codes = ENUM_CODE_SETS.get(prefix, set())
-    if code in enum_codes:
+    if prefix is not None and code is not None and point_map.is_enum(prefix, code):
         return prefix, code, "enum", int(rest[3])
     value = int.from_bytes(rest[2:4], "big") / 10.0
     return prefix, code, "analog_x10", value
 
 
-def decode_cmd3_rest(rest: bytes) -> tuple[Optional[int], Optional[int], Kind, Optional[Value]]:
+def decode_cmd3_rest(
+    rest: bytes, point_map: Optional[PointMap] = None
+) -> tuple[
+    Optional[int],
+    Optional[int],
+    Kind,
+    Optional[Value],
+    Optional[str],
+    Optional[str],
+]:
+    point_map = _get_pointmap(point_map)
     prefix = rest[0] if len(rest) >= 1 else None
     code = rest[1] if len(rest) >= 2 else None
-    if len(rest) == 3 and rest[2] == 0x00:
-        return prefix, code, "ack", None
-    return prefix, code, "unknown", None
+    if prefix is not None and code is not None:
+        code = point_map.canonicalize(prefix, code)
+    if len(rest) < 3:
+        return prefix, code, "unknown", None, None, "short_rest"
+    if rest[2] == 0x00:
+        extra_bytes = rest[3:]
+        if extra_bytes[:1] == b"\x00":
+            extra_bytes = extra_bytes[1:]
+        extra = extra_bytes.hex() if extra_bytes else None
+        return prefix, code, "ack", None, extra, None
+    return prefix, code, "unknown", None, None, None
 
 
 def parse_ota_msg(
-    t_rel: float, nwk_src_short: int, nwk_dst_short: int, aps_frame: ApsFrame
+    t_rel: float,
+    nwk_src_short: int,
+    nwk_dst_short: int,
+    aps_frame: ApsFrame,
+    point_map: Optional[PointMap] = None,
 ) -> Optional[OtaMsg]:
     payload = aps_frame.payload
     if len(payload) < 3:
@@ -122,15 +147,20 @@ def parse_ota_msg(
     code: Optional[int] = None
     kind: Kind = "unknown"
     value: Optional[Value] = None
+    ack_extra_hex: Optional[str] = None
+    reason: Optional[str] = None
+    point_map = _get_pointmap(point_map)
 
     if cmd_id == 0x00:
         kind = "identify_req"
     elif cmd_id == 0x01:
         kind = "identify_rsp"
     elif cmd_id == 0x02:
-        prefix, code, kind, value = decode_cmd2_rest(rest)
+        prefix, code, kind, value = decode_cmd2_rest(rest, point_map)
     elif cmd_id == 0x03:
-        prefix, code, kind, value = decode_cmd3_rest(rest)
+        prefix, code, kind, value, ack_extra_hex, reason = decode_cmd3_rest(
+            rest, point_map
+        )
     else:
         _log_debug("ota.cmd_unsupported", cmd_id=cmd_id)
         return None
@@ -149,4 +179,8 @@ def parse_ota_msg(
         kind=kind,
         value=value,
         raw_rest_hex=rest.hex(),
+        rest_len=len(rest),
+        ack_extra_hex=ack_extra_hex,
+        label=point_map.label_for(prefix, code, kind) if prefix is not None and code is not None else None,
+        reason=reason,
     )

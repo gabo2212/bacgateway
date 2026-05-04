@@ -11,3 +11,17 @@ __pycache__/
 .ruff_cache/
 .coverage
 .cache/
+
+# local captures (raw pcapng / action logs are not tracked, but the
+# manifest, example, and README under captures/ are)
+captures/*
+!captures/README.md
+!captures/manifest.yaml
+!captures/manifest.example.yaml
+!captures/.gitkeep
+*.pcapng
+/ota/
+gateway/ota/point_map.yaml
+gateway/ota/pointmap.backup.json
+gateway/ota/pointmap.noack.json
+

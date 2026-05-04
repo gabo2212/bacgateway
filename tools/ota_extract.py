@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import json
 import logging
 import sys
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterator, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +17,7 @@ if str(ROOT) not in sys.path:
 from gateway.ota.app import OtaMsg, parse_ota_msg
 from gateway.ota.ieee802154 import parse_mac_frame, strip_tap
 from gateway.ota.pcapng import PcapNgReader
+from gateway.ota.registry import ObservedKey, ObservedStats, update_registry
 from gateway.ota.zigbee import parse_aps_frame, parse_nwk_frame
 
 LOGGER = logging.getLogger(__name__)
@@ -24,18 +27,11 @@ CLUSTER_ID = 0x0002
 
 
 @dataclass
-class Stats:
-    pcap_packets: int = 0
-    tap_short: int = 0
-    mac_none: int = 0
-    pan_filtered: int = 0
-    nwk_none: int = 0
-    nwk_retry: int = 0
-    aps_none: int = 0
-    app_filtered: int = 0
-    app_none: int = 0
-    device_filtered: int = 0
-    output: int = 0
+class StatEntry:
+    count: int
+    first: float
+    last: float
+    sample: str
 
 
 def _parse_int(text: str) -> int:
@@ -58,7 +54,43 @@ def _format_line(msg: OtaMsg) -> str:
     ]
     if msg.value is not None:
         parts.append(f"value={msg.value}")
+    if msg.label:
+        parts.append(f"label={msg.label}")
+    if msg.ack_extra_hex is not None:
+        parts.append(f"extra={msg.ack_extra_hex}")
+    if msg.kind == "unknown" or msg.reason:
+        parts.append(f"rest_len={msg.rest_len}")
+    if msg.reason:
+        parts.append(f"reason={msg.reason}")
     return " ".join(parts)
+
+
+def _format_json(msg: OtaMsg) -> dict[str, object]:
+    data: dict[str, object] = {
+        "t": round(msg.t_rel, 3),
+        "dir": msg.direction,
+        "dev": f"0x{msg.device_short:04x}",
+        "cmd": msg.cmd_id,
+        "payload": msg.raw_rest_hex,
+        "kind": msg.kind,
+    }
+    if msg.value is not None:
+        data["value"] = msg.value
+    if msg.label:
+        data["label"] = msg.label
+    if msg.ack_extra_hex is not None:
+        data["extra"] = msg.ack_extra_hex
+    if msg.kind == "unknown" or msg.reason:
+        data["rest_len"] = msg.rest_len
+    if msg.reason:
+        data["reason"] = msg.reason
+    return data
+
+
+def _format_optional_hex(value: Optional[int], width: int) -> str:
+    if value is None:
+        return "?"
+    return f"0x{value:0{width}x}"
 
 
 def _iter_messages(
@@ -66,54 +98,35 @@ def _iter_messages(
     tap_len: int,
     pan_filter: Optional[int],
     only_app: bool,
-    stats: Optional[Stats] = None,
 ) -> Iterator[OtaMsg]:
     reader = PcapNgReader(pcap_path)
     t0: Optional[float] = None
 
     for packet in reader.packets():
-        if stats is not None:
-            stats.pcap_packets += 1
         if t0 is None:
             t0 = packet.timestamp
         t_rel = packet.timestamp - t0
 
         tapped = strip_tap(packet.data, tap_len=tap_len)
         if tapped is None:
-            if stats is not None:
-                stats.tap_short += 1
             continue
         mac = parse_mac_frame(tapped)
         if mac is None:
-            if stats is not None:
-                stats.mac_none += 1
             continue
         if pan_filter is not None and mac.pan_id != pan_filter:
-            if stats is not None:
-                stats.pan_filtered += 1
             continue
         nwk = parse_nwk_frame(mac.payload)
         if nwk is None and len(mac.payload) >= 2:
             nwk = parse_nwk_frame(mac.payload[:-2])
-            if nwk is not None and stats is not None:
-                stats.nwk_retry += 1
         if nwk is None:
-            if stats is not None:
-                stats.nwk_none += 1
             continue
         aps = parse_aps_frame(nwk.payload)
         if aps is None:
-            if stats is not None:
-                stats.aps_none += 1
             continue
         if only_app and (aps.profile_id != PROFILE_ID or aps.cluster_id != CLUSTER_ID):
-            if stats is not None:
-                stats.app_filtered += 1
             continue
         msg = parse_ota_msg(t_rel, nwk.src, nwk.dst, aps)
         if msg is None:
-            if stats is not None:
-                stats.app_none += 1
             continue
         yield msg
 
@@ -133,7 +146,26 @@ def main() -> None:
     parser.add_argument(
         "--stats",
         action="store_true",
-        help="Print packet processing stats to stderr",
+        help="Summarize unknown cmd2 frames instead of printing each message",
+    )
+    parser.add_argument(
+        "--stats-all",
+        action="store_true",
+        help="Include all decoded messages in stats output",
+    )
+    parser.add_argument(
+        "--catalog",
+        help="Write observed point registry CSV (stats mode only)",
+    )
+    parser.add_argument(
+        "--out",
+        help="Write output to a specific path (default: ota/baselines/<pcap>.decoded.txt)",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["text", "jsonl", "csv"],
+        default="text",
+        help="Output format for decoded messages (default: text)",
     )
     args = parser.parse_args()
 
@@ -142,39 +174,210 @@ def main() -> None:
     device_filter = _parse_int(args.device) if args.device else None
     pan_filter = _parse_int(args.pan) if args.pan else None
 
-    stats = Stats() if args.stats else None
+    catalog_path = Path(args.catalog) if args.catalog else None
+    stats_mode = args.stats or args.stats_all or catalog_path is not None
 
-    out_path = Path("ota") / "baselines" / f"{Path(args.pcap).stem}.decoded.txt"
+    if stats_mode:
+        if args.format != "text":
+            raise SystemExit("--format only applies to decoded output (not stats)")
+        entries: dict[
+            tuple[int, str, int, Optional[int], Optional[int], int],
+            StatEntry,
+        ] = {}
+        catalog: dict[tuple[int, str], dict[ObservedKey, ObservedStats]] = {}
+
+        for msg in _iter_messages(args.pcap, args.tap_len, pan_filter, args.only_app):
+            if device_filter is not None and msg.device_short != device_filter:
+                continue
+            if not args.stats_all and not (msg.cmd_id == 0x02 and msg.kind == "unknown"):
+                continue
+            rest_len = len(msg.raw_rest_hex) // 2
+            key = (
+                msg.device_short,
+                msg.direction,
+                msg.cmd_id,
+                msg.prefix,
+                msg.code,
+                rest_len,
+            )
+            entry = entries.get(key)
+            if entry is None:
+                entries[key] = StatEntry(
+                    count=1,
+                    first=msg.t_rel,
+                    last=msg.t_rel,
+                    sample=msg.raw_rest_hex,
+                )
+            else:
+                entry.count += 1
+                entry.first = min(entry.first, msg.t_rel)
+                entry.last = max(entry.last, msg.t_rel)
+            if catalog_path is not None:
+                reg_key = (msg.device_short, msg.direction)
+                reg = catalog.setdefault(reg_key, {})
+                update_registry(reg, msg)
+
+        stats_suffix = "stats-all" if args.stats_all else "stats"
+        out_path = (
+            Path(args.out)
+            if args.out
+            else Path("ota") / "baselines" / f"{Path(args.pcap).stem}.{stats_suffix}.txt"
+        )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        lines: list[str] = []
+        for key, entry in sorted(
+            entries.items(),
+            key=lambda item: (
+                -item[1].count,
+                item[0][0],
+                item[0][3] if item[0][3] is not None else 0x1_0000,
+                item[0][4] if item[0][4] is not None else 0x1_0000,
+                item[0][5],
+                item[0][1],
+                item[0][2],
+            ),
+        ):
+            dev, direction, cmd_id, prefix, code, rest_len = key
+            line = " ".join(
+                [
+                    f"count={entry.count}",
+                    f"dev=0x{dev:04x}",
+                    f"dir={direction}",
+                    f"cmd={cmd_id}",
+                    f"prefix={_format_optional_hex(prefix, 2)}",
+                    f"code={_format_optional_hex(code, 2)}",
+                    f"len={rest_len}",
+                    f"first={entry.first:.3f}",
+                    f"last={entry.last:.3f}",
+                    f"sample={entry.sample}",
+                ]
+            )
+            lines.append(line)
+            print(line)
+
+        with out_path.open("w", encoding="utf-8", newline="\n") as handle:
+            for line in lines:
+                handle.write(line + "\n")
+        if catalog_path is not None:
+            catalog_path.parent.mkdir(parents=True, exist_ok=True)
+            with catalog_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(
+                    [
+                        "dev",
+                        "direction",
+                        "cmd",
+                        "prefix",
+                        "code",
+                        "rest_len",
+                        "kind_set",
+                        "count",
+                        "first",
+                        "last",
+                        "sample",
+                    ]
+                )
+                for (dev, direction), reg in sorted(
+                    catalog.items(), key=lambda item: (item[0][0], item[0][1])
+                ):
+                    for key, entry in sorted(
+                        reg.items(),
+                        key=lambda item: (
+                            item[0].cmd_id,
+                            item[0].prefix,
+                            item[0].code,
+                            item[0].rest_len,
+                        ),
+                    ):
+                        writer.writerow(
+                            [
+                                f"0x{dev:04x}",
+                                direction,
+                                key.cmd_id,
+                                f"0x{key.prefix:02x}",
+                                f"0x{key.code:02x}",
+                                key.rest_len,
+                                "|".join(sorted(entry.kinds)),
+                                entry.count,
+                                f"{entry.first_t:.3f}",
+                                f"{entry.last_t:.3f}",
+                                entry.sample_rest_hex,
+                            ]
+                        )
+        return
+
+    if args.out:
+        out_path = Path(args.out)
+    else:
+        suffix = {
+            "text": "decoded.txt",
+            "jsonl": "decoded.jsonl",
+            "csv": "decoded.csv",
+        }[args.format]
+        out_path = Path("ota") / "baselines" / f"{Path(args.pcap).stem}.{suffix}"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with out_path.open("w", encoding="utf-8", newline="\n") as handle:
-        for msg in _iter_messages(args.pcap, args.tap_len, pan_filter, args.only_app, stats):
-            if device_filter is not None and msg.device_short != device_filter:
-                if stats is not None:
-                    stats.device_filtered += 1
-                continue
-            line = _format_line(msg)
-            print(line)
-            handle.write(line + "\n")
-            if stats is not None:
-                stats.output += 1
+    if args.format == "text":
+        with out_path.open("w", encoding="utf-8", newline="\n") as handle:
+            for msg in _iter_messages(args.pcap, args.tap_len, pan_filter, args.only_app):
+                if device_filter is not None and msg.device_short != device_filter:
+                    continue
+                line = _format_line(msg)
+                print(line)
+                handle.write(line + "\n")
+        return
 
-    if stats is not None:
-        print(
-            "stats:",
-            f"pcap_packets={stats.pcap_packets}",
-            f"tap_short={stats.tap_short}",
-            f"mac_none={stats.mac_none}",
-            f"pan_filtered={stats.pan_filtered}",
-            f"nwk_none={stats.nwk_none}",
-            f"nwk_retry={stats.nwk_retry}",
-            f"aps_none={stats.aps_none}",
-            f"app_filtered={stats.app_filtered}",
-            f"app_none={stats.app_none}",
-            f"device_filtered={stats.device_filtered}",
-            f"output={stats.output}",
-            file=sys.stderr,
-        )
+    if args.format == "jsonl":
+        with out_path.open("w", encoding="utf-8", newline="\n") as handle:
+            for msg in _iter_messages(args.pcap, args.tap_len, pan_filter, args.only_app):
+                if device_filter is not None and msg.device_short != device_filter:
+                    continue
+                record = json.dumps(_format_json(msg), separators=(",", ":"))
+                print(record)
+                handle.write(record + "\n")
+        return
+
+    if args.format == "csv":
+        with out_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(
+                [
+                    "t",
+                    "dir",
+                    "dev",
+                    "cmd",
+                    "payload",
+                    "kind",
+                    "value",
+                    "label",
+                    "extra",
+                    "rest_len",
+                    "reason",
+                ]
+            )
+            print(
+                "t,dir,dev,cmd,payload,kind,value,label,extra,rest_len,reason"
+            )
+            for msg in _iter_messages(args.pcap, args.tap_len, pan_filter, args.only_app):
+                if device_filter is not None and msg.device_short != device_filter:
+                    continue
+                row = [
+                    f"{msg.t_rel:.3f}",
+                    msg.direction,
+                    f"0x{msg.device_short:04x}",
+                    msg.cmd_id,
+                    msg.raw_rest_hex,
+                    msg.kind,
+                    msg.value if msg.value is not None else "",
+                    msg.label or "",
+                    msg.ack_extra_hex or "",
+                    msg.rest_len if (msg.kind == "unknown" or msg.reason) else "",
+                    msg.reason or "",
+                ]
+                writer.writerow(row)
+                print(",".join(str(item) for item in row))
+        return
 
 
 if __name__ == "__main__":

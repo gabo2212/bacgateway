@@ -1,0 +1,90 @@
+# OTA capture manifest for current capture-mining pass.
+#
+# Raw files live under captures/raw/ and were copied from ../../WiresharkN.
+
+captures:
+  - capture_id: log1
+    pcap: captures/raw/log1.pcapng
+    task_type: idle
+    notes: "Pass 1 baseline/capture sanity check; confirms channel/PAN/stack visibility."
+
+  - capture_id: log2
+    pcap: captures/raw/log2.pcapng
+    action_log: captures/raw/Actionsforlog2.txt
+    device_label: mixed_DEVICE2_RTC
+    task_type: unknown
+    notes: "Pass 2 mixed actions: DEVICE2 ping, point discovery, occupied cooling setpoint changes, RTC ping/discovery, RTC setpoint, enum/control/occupancy activity, ping all."
+
+  - capture_id: pass3_device2
+    pcap: captures/raw/pass3_device2.pcapng
+    action_log: captures/raw/pass3_device2.txt
+    device_label: DEVICE2
+    short_addr: "0x0001"
+    task_type: setpoint_write
+    notes: "Pass 3 DEVICE2 action log: ping, signal strength, occupied cooling setpoint changes 92/69/71/66/69, Auto release, occupancy command occupied/unoccupied/Auto, final ping."
+
+  - capture_id: pass3_rtc
+    pcap: captures/raw/pass3_rtc.pcapng
+    action_log: captures/raw/pass3_rtc.txt
+    device_label: RTC
+    short_addr: "0x143E"
+    task_type: setpoint_write
+    notes: "Pass 3 RTC action log: ping, signal strength, occupied cooling setpoint changes 69/71/66/69, Auto release, occupancy command occupied/unoccupied/Auto, final ping."
+
+  - capture_id: pass4_device2
+    pcap: captures/raw/pass4_device2.pcapng
+    action_log: captures/raw/pass4_device2.txt
+    device_label: DEVICE2
+    short_addr: "0x0001"
+    task_type: setpoint_write
+    notes: "Pass 4 DEVICE2 scripted actions: ping, occupied cooling setpoint overrides 92/69/71/66/69, Auto release, occupancy command occupied/unoccupied/occupied/Auto."
+
+  - capture_id: pass4_rtc
+    pcap: captures/raw/pass4_rtc.pcapng
+    action_log: captures/raw/pass4_rtc.txt
+    device_label: RTC
+    short_addr: "0x143E"
+    task_type: setpoint_write
+    notes: "Pass 4 RTC scripted actions: ping, occupied cooling setpoint overrides 92/69/71/66/69, Auto release, occupancy command occupied/unoccupied/occupied/Auto."
+
+  - capture_id: exp1_rtc_A
+    pcap: captures/raw/exp1_rtc_A.pcapng
+    device_label: RTC
+    short_addr: "0x143E"
+    task_type: idle
+    notes: "Experiment 1 A-side baseline before RTC occupied heat setpoint change."
+
+  - capture_id: exp1_rtc_B
+    pcap: captures/raw/exp1_rtc_B.pcapng
+    device_label: RTC
+    short_addr: "0x143E"
+    task_type: setpoint_write
+    notes: "Experiment 1 B-side after RTC occupied heat setpoint change; known outcome 0x49 write maps to 0x0A report."
+
+  - capture_id: exp2_rtc_A
+    pcap: captures/raw/exp2_rtc_A.pcapng
+    device_label: RTC
+    short_addr: "0x143E"
+    task_type: idle
+    notes: "Experiment 2 A-side baseline before RTC occupied cool setpoint change."
+
+  - capture_id: exp2_rtc_B
+    pcap: captures/raw/exp2_rtc_B.pcapng
+    device_label: RTC
+    short_addr: "0x143E"
+    task_type: setpoint_write
+    notes: "Experiment 2 B-side after RTC occupied cool setpoint change; known outcome 0x4B write maps to 0x2D report."
+
+  - capture_id: exp3_rtc_A
+    pcap: captures/raw/exp3_rtc_A.pcapng
+    device_label: RTC
+    short_addr: "0x143E"
+    task_type: idle
+    notes: "Experiment 3 A-side baseline before RTC candidate setpoint/action."
+
+  - capture_id: exp3_rtc_B
+    pcap: captures/raw/exp3_rtc_B.pcapng
+    device_label: RTC
+    short_addr: "0x143E"
+    task_type: setpoint_write
+    notes: "Experiment 3 B-side after RTC candidate action; known outcome 0x4C write maps to 0x45 report, semantic name still candidate."
