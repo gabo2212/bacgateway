@@ -11,10 +11,11 @@ thermostats. The project runs three parallel tracks (see
   radio module (57600 8N1, RTS/CTS on non-Windows, `<`/`@` framing, byte-sum
   CRC). Lowest-risk true replacement when the radio module is available; partly
   implemented in `gateway/vwg_serial.py`.
-- **Track C — nRF active custom APS coordinator:** custom Viconics-W radio
-  adapter on nRF52840 hardware (raw 802.15.4 + vendor APS profile `0xC1E4`,
-  cluster `0x0002`, endpoints `0x0A`↔`0x32`). Primary R&D track from Phase 1
-  onward. Not a generic Zigbee coordinator and not a Zigbee2MQTT integration.
+- **Track C — nRF receive/custom APS path:** nRF52840 receive bridge first,
+  then later custom Viconics-W radio work after evidence gates pass (raw
+  802.15.4 + vendor APS profile `0xC1E4`, cluster `0x0002`, endpoints
+  `0x0A`↔`0x32`). Not a generic Zigbee coordinator and not a Zigbee2MQTT
+  integration.
 
 OTA capture mining (Phase 0) feeds all three tracks: decoded `.pcapng` evidence
 plus operator action logs produce the confirmed mappings in
@@ -28,10 +29,15 @@ plus operator action logs produce the confirmed mappings in
 - OTA parser stack exists under `gateway/ota/`.
 - Capture manifest and batch tooling exist under `gateway/captures/` and `tools/`.
 - Confirmed OTA facts and mappings are documented in `docs/ota/`.
+- Receive-only nRF host bridge exists under `gateway/radio/nrf_bridge_*.py`
+  and `tools/nrf_live_rx.py`.
+- Phase 1B receive-only nRF52840 firmware skeleton exists under
+  `firmware/nrf_vwg_bridge_rx/`.
 - Raw captures are intentionally gitignored; curated manifests and mapping docs are tracked.
 - Full test suite currently covers the capture tools, OTA decoder/mapping logic,
   JACE client scaffolding, Niagara parsing/auth behavior, radio session matching,
-  and probe smoke tests.
+  nRF host protocol/live adapter behavior, firmware source inspection, and
+  probe smoke tests.
 
 ## Setup
 
@@ -66,7 +72,9 @@ python tools\ota_validate.py
   source path.
 - `gateway/demo_a2_mirror.py` — Niagara `/ord` to BACnet/IP demo mirror.
 - `gateway/radio/`, `gateway/vwg_serial.py`, `proto/codec.py` — Track B vendor
-  radio serial adapter and Track C nRF custom APS coordinator foundations.
+  radio serial adapter plus the Track C nRF host bridge and session foundations.
+- `firmware/nrf_vwg_bridge_rx/` — Phase 1B nRF52840 receive-only firmware
+  skeleton for USB CDC `RX_FRAME` streaming.
 - `tools/` — operator CLIs for capture mining, mapping reports, JACE probing,
   OTA baselines, diffs, label generation, point-map edits, and TX verification.
 - `captures/manifest.yaml` — curated capture inventory.
@@ -266,11 +274,39 @@ python tools\vwg_probe.py read --comm-addr 10 --point 0x1000 --port COM3
 python tools\vwg_probe.py write --comm-addr 10 --point 0x1005 --value 72.0 --port COM3
 ```
 
-## Track C — nRF Custom APS Coordinator (Phase 1+)
+## Track C — nRF Receive Bridge / Custom APS Path (Phase 1+)
 
-Track C is the primary R&D path. It is a custom raw-802.15.4 bridge that
-emits and consumes vendor-profile APS frames (`0xC1E4` / cluster `0x0002`),
-**not** a stock Zigbee coordinator and **not** a Zigbee2MQTT integration.
+Track C is the primary R&D path. Phase 1 is receive-only: the nRF listens to
+live IEEE 802.15.4 traffic and streams raw PSDUs over USB serial for the Python
+decoder. Later phases may add custom vendor-profile APS work (`0xC1E4` /
+cluster `0x0002`), but this is **not** a stock Zigbee coordinator and **not** a
+Zigbee2MQTT integration.
+
+Phase 1A host side:
+
+- `gateway/radio/nrf_bridge_proto.py`
+- `gateway/radio/nrf_bridge_client.py`
+- `gateway/radio/live_adapter.py`
+- `tools/nrf_live_rx.py`
+- `docs/radio/nrf_bridge_protocol.md`
+- `docs/radio/receive_only_live_test.md`
+
+Phase 1B firmware side:
+
+- `firmware/nrf_vwg_bridge_rx/`
+- `docs/radio/nrf_firmware_bringup.md`
+
+Firmware smoke command:
+
+```powershell
+python tools\nrf_live_rx.py --port COM7 --channel 15 --limit 50
+```
+
+Linux:
+
+```bash
+python tools/nrf_live_rx.py --port /dev/ttyACM0 --channel 15 --limit 50
+```
 
 Safety rules until the Phase 2 and Phase 3 gates pass:
 
@@ -280,9 +316,8 @@ Safety rules until the Phase 2 and Phase 3 gates pass:
   window before any TX work.
 - TX experiments use a stand-alone PAN in the range `251–500` and an isolated
   channel, with a spare thermostat where possible.
-- Track C deliverables (`firmware/nrf_vwg_bridge/`,
-  `gateway/radio/nrf_bridge_*.py`) are Phase 1+ work and do not exist yet in
-  this repo.
+- `TX_RAW` is reserved in the host protocol but is not exposed by the Phase 1B
+  firmware.
 
 ## Git Hygiene
 

@@ -1,6 +1,7 @@
 # nRF Bridge Protocol
 
-This document describes the host-side binary frame codec for the nRF bridge.
+This document describes the binary frame codec shared by the Python host bridge
+and the Phase 1B receive-only nRF52840 firmware.
 
 ## Frame Format
 
@@ -44,6 +45,18 @@ timestamp_us(8) | channel(1) | rssi_dbm(1) | lqi(1) | raw_psdu(N)
 - `lqi`: 8-bit signed integer
 - `raw_psdu`: Remainder of payload
 
+The host implementation is `gateway/radio/nrf_bridge_proto.py`; the firmware
+implementation is `firmware/nrf_vwg_bridge_rx/src/bridge_proto.c`.
+
+## HELLO_RESP Payload
+
+The Phase 1B firmware emits a `HELLO_RESP` frame after USB CDC ACM is opened.
+The current payload is ASCII capability text:
+
+```text
+proto=1;name=nrf_vwg_bridge_rx;fw=0.1.0;cap=RX_ONLY
+```
+
 ## ACK Separation
 
 It is critical to distinguish between three types of ACKs:
@@ -54,4 +67,4 @@ It is critical to distinguish between three types of ACKs:
 
 ## Transmit Restrictions
 
-Active transmission (`TX_RAW`) is **not implemented** in Phase 1A. The bridge acts as a passive sniffer only to ensure safety and prevent disruption to the live PAN.
+Active transmission (`TX_RAW`) is **not implemented** in Phase 1A/1B. The bridge acts as a passive sniffer only to ensure safety and prevent disruption to the live PAN.
