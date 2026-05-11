@@ -1,6 +1,6 @@
 # Known OTA Mappings
 
-Human-readable companion to `gateway/ota/pointmap.json`. Only mappings
+Human-readable companion to `gateway/ota/pointmap.yaml`. Only mappings
 already backed by existing code, docs, or capture evidence are listed here.
 Do not invent new mappings in this file; promote an entry only after the
 evidence rules below are satisfied.
@@ -39,7 +39,7 @@ From `gateway/ota/app.py` and `docs/ota/README.md`:
 
 ## Confirmed point mappings
 
-From `gateway/ota/pointmap.json` (curated entries with non-placeholder
+From `gateway/ota/pointmap.yaml` (curated entries with non-placeholder
 labels) and `docs/ota/README.md` experiment outcomes:
 
 - Family `0x08`:
@@ -49,11 +49,11 @@ labels) and `docs/ota/README.md` experiment outcomes:
     candidate; semantic name not finalized)
 
 Report-to-write normalization for both families is preserved in
-`pointmap.json` under `families.<prefix>.report_to_write`.
+`pointmap.yaml` by ensuring `report_code` is mapped inside the same entry.
 
 ## Candidate mappings
 
-These are present in `pointmap.json` with placeholder labels (`auto_…` or
+These are present in `pointmap.yaml` with placeholder labels (`auto_…` or
 `sp_…`) and have not yet been promoted to confirmed semantic names. Treat
 them as evidence anchors only; do not rename them without action-log or
 A/B experiment evidence.
@@ -68,7 +68,7 @@ Surfaced by `tools/ota_batch_analyze.py` and the `--stats`/catalog flow of
 `tools/ota_extract.py`. Categories tracked but not promoted:
 
 - `cmd=2` frames whose `(prefix, code, rest_len)` tuple is not in
-  `pointmap.json`
+  `pointmap.yaml`
 - `cmd=3` frames with `rest_len < 3` (`reason=short_rest`)
 - Vendor frames whose `cmd_id` is neither `0`, `1`, `2`, nor `3`
 - Non-vendor frames (any frame not matching profile `0xC1E4` /
@@ -95,7 +95,7 @@ one** of the following is true:
 Additional rules:
 
 - Report codes must be normalized through
-  `families.<prefix>.report_to_write` in `pointmap.json` before the write
+  a `report_code` property mapped to `write_code` in `pointmap.yaml` before the write
   code is renamed.
 - Candidate labels must remain clearly marked (`candidate_…`,
   `auto_…`, `sp_…`, `occ_…`) until promoted.

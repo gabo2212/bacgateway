@@ -31,7 +31,7 @@
 
 ## Point Map
 
-- `gateway/ota/pointmap.json` stores known point codes and optional labels.
+- `gateway/ota/pointmap.yaml` stores known point codes and optional labels. (Note: `ota_labelgen.py` still expects `.json` format)
 - New `u8` codes are added via `ota_labelgen.py` with placeholder labels.
 - `ota_labelgen.py` skips `ack` placeholders by default; pass `--include-ack` to include them.
 - Candidate points (for experiments) should be added with safe placeholder labels.
@@ -58,9 +58,15 @@ Use `tools/ota_baseline.py` to generate deterministic artifacts:
 
 ## Workflow
 
+The source of truth for confirmed mappings is `gateway/ota/pointmap.yaml`,
+managed via `tools/ota_promote_mapping.py`. The `ota_labelgen.py`,
+`ota_pointmap_edit.py`, and `ota_validate.py` tools still operate on the
+legacy `gateway/ota/pointmap.json` format and are pending YAML migration; the
+examples below reflect that unmigrated state.
+
 1. Decode a capture and generate artifacts:
    `python tools/ota_baseline.py --pcap captures/pass4_rtc.pcapng --device 0x143e --tag pass4_rtc`
-2. Generate placeholder labels from catalogs:
+2. Generate placeholder labels from catalogs (legacy JSON tool):
    `python tools/ota_labelgen.py --map gateway/ota/pointmap.json --apply ota/baselines/pass4_rtc.catalog.csv`
 3. Re-run `ota_extract.py` to see `label=` fields.
 4. Compare experiments with:

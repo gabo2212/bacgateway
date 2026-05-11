@@ -265,7 +265,7 @@ def validate_pointmap(data: dict[str, Any], allow_multi_label: bool) -> list[str
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Edit gateway/ota/pointmap.json safely")
+    parser = argparse.ArgumentParser(description="Edit gateway/ota/pointmap.json safely (Note: Pending YAML update, expects JSON)")
     parser.add_argument("--map", default="gateway/ota/pointmap.json", help="Path to pointmap.json")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

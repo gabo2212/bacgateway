@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from gateway.ota.decoded import DecodedLine, load_decoded_lines
-from gateway.ota.pointmap import PointMap
+from gateway.ota.pointmap import PointMap, load_pointmap
 
 
 def _parse_hex(value: Optional[str]) -> Optional[int]:
@@ -276,7 +276,7 @@ def main() -> None:
     path_b = Path(args.b)
 
     if path_a.suffix == ".txt" and path_b.suffix == ".txt":
-        pointmap = PointMap.from_json(Path("gateway/ota/pointmap.json"))
+        pointmap = load_pointmap(Path("gateway/ota/pointmap.yaml"))
         _diff_decoded(path_a, path_b, pointmap, args.by_device, args.limit)
         return
     if path_a.suffix == ".csv" and path_b.suffix == ".csv":

@@ -265,7 +265,7 @@ def build_mapping_report(
     window: float = DEFAULT_WINDOW,
     base_dir: Path = ROOT,
 ) -> MappingReport:
-    point_map = PointMap.from_json(base_dir / "gateway" / "ota" / "pointmap.json")
+    point_map = PointMap.from_json(base_dir / "gateway" / "ota" / "pointmap.yaml")
     known_path = base_dir / "docs" / "ota" / "known_ota_mappings.md"
     known_text = known_path.read_text(encoding="utf-8", errors="replace") if known_path.exists() else ""
     entries = list(manifest)

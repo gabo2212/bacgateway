@@ -107,7 +107,7 @@ def _sorted_family_keys(families: dict) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate placeholder point labels from catalogs")
+    parser = argparse.ArgumentParser(description="Generate placeholder point labels from catalogs (Note: Pending YAML update, expects JSON)")
     parser.add_argument(
         "catalogs",
         nargs="+",

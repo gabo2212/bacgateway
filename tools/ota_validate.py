@@ -40,7 +40,7 @@ def _has_point(points: list[dict], family: str, code: str, kind: str, label: str
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate OTA pointmap.json invariants")
+    parser = argparse.ArgumentParser(description="Validate OTA pointmap.json invariants (Note: Pending YAML update, expects JSON)")
     parser.add_argument("--map", default="gateway/ota/pointmap.json", help="Path to pointmap.json")
     args = parser.parse_args()
 

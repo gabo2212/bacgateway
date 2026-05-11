@@ -1,0 +1,21 @@
+mappings:
+- device_label: Device2
+  prefix: '0x08'
+  write_code: '0x49'
+  report_code: '0x0a'
+  canonical_point: occupied_heat_setpoint
+  kind: analog_x10
+  scale: 10
+  direction: bidirectional
+  status: confirmed
+  evidence: Exp1
+- device_label: Device2
+  prefix: '0x08'
+  write_code: '0x4b'
+  report_code: '0x2d'
+  canonical_point: occupied_cool_setpoint
+  kind: analog_x10
+  scale: 10
+  direction: bidirectional
+  status: confirmed
+  evidence: Exp2

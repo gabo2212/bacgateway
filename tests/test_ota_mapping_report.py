@@ -88,7 +88,7 @@ class CandidateInferenceTests(unittest.TestCase):
 
 class RowExtractionTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.point_map = PointMap({}, {}, {})
+        self.point_map = PointMap([])
         self.action = ActionEvent(
             t_rel=10.0,
             label="occupied cooling setpoint 69",
@@ -185,7 +185,7 @@ class OutputFormatTests(unittest.TestCase):
             DecodedOtaFrame(msg=_msg(), src_short=0, dst_short=0x143E),
             action=ActionEvent(t_rel=10.0, label="occupied cooling setpoint", raw_line="00:10 occupied cooling setpoint"),
             window=2.0,
-            point_map=PointMap({}, {}, {}),
+            point_map=PointMap([]),
             known_text="",
         )
         unknown = UnknownPayloadGroup("cap", "dev", "gw->dev", 4, "0x08", "0x99", "08990000", 3)

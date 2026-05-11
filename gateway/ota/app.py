@@ -14,10 +14,6 @@ Direction = Literal["gw->dev", "dev->gw"]
 Kind = Literal["identify_req", "identify_rsp", "analog_x10", "enum", "ack", "unknown", "u8"]
 Value = float | int
 
-PREFIX_TO_DEVICE_SHORT: dict[int, int] = {
-    0x08: 0x143E,
-    0x0A: 0x0001,
-}
 
 def _log_debug(event: str, **fields: object) -> None:
     if LOGGER.isEnabledFor(logging.DEBUG):
@@ -31,15 +27,16 @@ def _get_pointmap(override: Optional[PointMap] = None) -> PointMap:
         return override
     global _DEFAULT_POINTMAP
     if _DEFAULT_POINTMAP is None:
-        path = Path(__file__).with_name("pointmap.json")
-        _DEFAULT_POINTMAP = PointMap.from_json(path)
+        path = Path(__file__).with_name("pointmap.yaml")
+        from .pointmap import load_pointmap
+        _DEFAULT_POINTMAP = load_pointmap(path)
     return _DEFAULT_POINTMAP
 
 
-def normalize_code(prefix: int | None, code: int | None) -> tuple[int | None, int | None]:
+def normalize_code(prefix: int | None, code: int | None, point_map: Optional[PointMap] = None) -> tuple[int | None, int | None]:
     if prefix is None or code is None:
         return prefix, code
-    point_map = _get_pointmap()
+    point_map = _get_pointmap(point_map)
     return prefix, point_map.canonicalize(prefix, code)
 
 

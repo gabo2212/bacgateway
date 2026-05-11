@@ -1,18 +1,24 @@
 # BACnet Viconics Gateway
 
 Python gateway and reverse-engineering toolkit for Viconics / VWG wireless
-thermostats. The project has two active paths:
+thermostats. The project runs three parallel tracks (see
+`Manuals/planforlivecon` for the master plan):
 
-- **Safe live bridge:** read selected thermostat points from a borrowed JACE over
-  Niagara `/ord`, mirror them locally, and expose them as BACnet/IP from this
-  codebase.
-- **OTA capture mining:** decode existing nRF / Wireshark `.pcapng` captures,
-  correlate them with operator action logs, and maintain conservative
-  confirmed/candidate OTA point mappings.
+- **Track A — JACE Ethernet bridge:** read selected thermostat points from a
+  borrowed JACE over Niagara `/ord`, mirror them locally, and expose them as
+  BACnet/IP. Demo / fallback only.
+- **Track B — Vendor radio serial adapter:** host serial protocol to a VWG/JACE
+  radio module (57600 8N1, RTS/CTS on non-Windows, `<`/`@` framing, byte-sum
+  CRC). Lowest-risk true replacement when the radio module is available; partly
+  implemented in `gateway/vwg_serial.py`.
+- **Track C — nRF active custom APS coordinator:** custom Viconics-W radio
+  adapter on nRF52840 hardware (raw 802.15.4 + vendor APS profile `0xC1E4`,
+  cluster `0x0002`, endpoints `0x0A`↔`0x32`). Primary R&D track from Phase 1
+  onward. Not a generic Zigbee coordinator and not a Zigbee2MQTT integration.
 
-True direct-radio replacement remains a later path. The code keeps source
-adapters, the point model, and BACnet presentation separate so the JACE adapter
-can eventually be replaced by a radio source adapter.
+OTA capture mining (Phase 0) feeds all three tracks: decoded `.pcapng` evidence
+plus operator action logs produce the confirmed mappings in
+`gateway/ota/pointmap.yaml`. Phase 0A/0B/0C are complete.
 
 ## Current Status
 
@@ -36,7 +42,7 @@ pip install -r requirements.txt
 Dependencies:
 
 - `bacpypes3` for BACnet/IP.
-- `pyserial` for the future/legacy serial-radio path.
+- `pyserial` for the Track B vendor radio serial path.
 - `PyYAML` for config and capture manifest files.
 
 Run tests:
@@ -59,8 +65,8 @@ python tools\ota_validate.py
 - `gateway/jace_client.py` / `gateway/niagara_client.py` — safe JACE Ethernet
   source path.
 - `gateway/demo_a2_mirror.py` — Niagara `/ord` to BACnet/IP demo mirror.
-- `gateway/radio/`, `gateway/vwg_serial.py`, `proto/codec.py` — future/direct
-  radio and legacy serial foundations.
+- `gateway/radio/`, `gateway/vwg_serial.py`, `proto/codec.py` — Track B vendor
+  radio serial adapter and Track C nRF custom APS coordinator foundations.
 - `tools/` — operator CLIs for capture mining, mapping reports, JACE probing,
   OTA baselines, diffs, label generation, point-map edits, and TX verification.
 - `captures/manifest.yaml` — curated capture inventory.
@@ -125,9 +131,9 @@ Do not promote inferred candidates automatically.
 - `docs/ota/candidate_ota_mappings.md` may list rows inferred from action text,
   but those rows stay candidates until reviewed against action-window or A/B
   experiment evidence.
-- `gateway/ota/pointmap.json` is the machine-readable point map used by the
+- `gateway/ota/pointmap.yaml` is the machine-readable point map used by the
   decoder.
-- `tools/ota_validate.py` must pass after point-map changes.
+- `tools/ota_validate.py` must pass after point-map changes (Note: Currently expects legacy JSON).
 
 Confirmed current semantic mappings:
 
@@ -234,10 +240,13 @@ continues even if write attempts fail.
 
 See `docs/demo_a2/README.md` for firewall and verification notes.
 
-## Legacy / Future Direct-Radio Path
+## Track B — Vendor Radio Serial (Reference Path)
 
-The direct-radio path is preserved but is not the current live path for borrowed
-hardware.
+These probes target a VWG/JACE radio module over host serial. The transport is
+57600 8N1, RTS/CTS on non-Windows, `<`/`@` framed messages, byte-sum CRC,
+35 ms inter-message delay, 8000 ms timeout, 3 retries (see
+`Manuals/deep-research-report.md`). This path activates when the radio module
+hardware becomes available; until then it remains a reference implementation.
 
 Low-level probe examples:
 
@@ -257,8 +266,23 @@ python tools\vwg_probe.py read --comm-addr 10 --point 0x1000 --port COM3
 python tools\vwg_probe.py write --comm-addr 10 --point 0x1005 --value 72.0 --port COM3
 ```
 
-Do not make the nRF an active coordinator or transmit on the live network until
-protocol mappings and hardware safety assumptions are explicit.
+## Track C — nRF Custom APS Coordinator (Phase 1+)
+
+Track C is the primary R&D path. It is a custom raw-802.15.4 bridge that
+emits and consumes vendor-profile APS frames (`0xC1E4` / cluster `0x0002`),
+**not** a stock Zigbee coordinator and **not** a Zigbee2MQTT integration.
+
+Safety rules until the Phase 2 and Phase 3 gates pass:
+
+- No active nRF transmit on the live PAN (`0x00D2`) or channel (`15`). The
+  borrowed JACE remains the only coordinator on that network.
+- Phase 1 is receive-only and must match offline pcap decode for the same
+  window before any TX work.
+- TX experiments use a stand-alone PAN in the range `251–500` and an isolated
+  channel, with a spare thermostat where possible.
+- Track C deliverables (`firmware/nrf_vwg_bridge/`,
+  `gateway/radio/nrf_bridge_*.py`) are Phase 1+ work and do not exist yet in
+  this repo.
 
 ## Git Hygiene
 
