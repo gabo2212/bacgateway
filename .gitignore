@@ -1,4 +1,6 @@
 __pycache__/
+/build/
+.mcp.json
 *.py[cod]
 *.pyo
 *.pyd
@@ -24,4 +26,3 @@ captures/*
 gateway/ota/point_map.yaml
 gateway/ota/pointmap.backup.json
 gateway/ota/pointmap.noack.json
-

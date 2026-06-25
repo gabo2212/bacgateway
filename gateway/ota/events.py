@@ -18,6 +18,11 @@ class OtaPointEvent:
     kind: str
     value: float | int
     enum_label: Optional[str] = None
+    timestamp: Optional[float] = None
+    source: Optional[str] = None
+    channel: Optional[int] = None
+    rssi_dbm: Optional[int] = None
+    lqi: Optional[int] = None
 
 @dataclass(frozen=True)
 class OtaAckEvent:
@@ -26,6 +31,11 @@ class OtaAckEvent:
     code: int
     canonical_point: str
     extra_hex: Optional[str] = None
+    timestamp: Optional[float] = None
+    source: Optional[str] = None
+    channel: Optional[int] = None
+    rssi_dbm: Optional[int] = None
+    lqi: Optional[int] = None
 
 @dataclass(frozen=True)
 class OtaUnknownEvent:
@@ -34,4 +44,8 @@ class OtaUnknownEvent:
     code: Optional[int]
     raw_rest_hex: str
     reason: Optional[str] = None
-
+    timestamp: Optional[float] = None
+    source: Optional[str] = None
+    channel: Optional[int] = None
+    rssi_dbm: Optional[int] = None
+    lqi: Optional[int] = None

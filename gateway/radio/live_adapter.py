@@ -68,7 +68,12 @@ class LiveAdapter:
                 canonical_point=ota_msg.label or f"unknown_{ota_msg.prefix}_{ota_msg.code}",
                 kind=ota_msg.kind,
                 value=ota_msg.value,
-                enum_label=None # Could map enum if needed
+                enum_label=None, # Could map enum if needed
+                timestamp=t_rel,
+                source="nrf_rx",
+                channel=rx_payload.channel,
+                rssi_dbm=rx_payload.rssi_dbm,
+                lqi=rx_payload.lqi,
             )
         elif ota_msg.kind == "ack":
             return OtaAckEvent(
@@ -76,7 +81,12 @@ class LiveAdapter:
                 prefix=ota_msg.prefix,
                 code=ota_msg.code,
                 canonical_point=ota_msg.label or f"unknown_{ota_msg.prefix}_{ota_msg.code}",
-                extra_hex=ota_msg.ack_extra_hex
+                extra_hex=ota_msg.ack_extra_hex,
+                timestamp=t_rel,
+                source="nrf_rx",
+                channel=rx_payload.channel,
+                rssi_dbm=rx_payload.rssi_dbm,
+                lqi=rx_payload.lqi,
             )
         else:
             return OtaUnknownEvent(
@@ -84,5 +94,10 @@ class LiveAdapter:
                 prefix=ota_msg.prefix,
                 code=ota_msg.code,
                 raw_rest_hex=ota_msg.raw_rest_hex,
-                reason=ota_msg.reason
+                reason=ota_msg.reason,
+                timestamp=t_rel,
+                source="nrf_rx",
+                channel=rx_payload.channel,
+                rssi_dbm=rx_payload.rssi_dbm,
+                lqi=rx_payload.lqi,
             )

@@ -10,15 +10,57 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Iterable, Tuple, Any, Optional
 
-from bacpypes3.apdu import ReadPropertyACK, ReadPropertyRequest, SimpleAckPDU, WritePropertyRequest
-from bacpypes3.basetypes import EngineeringUnits, PropertyIdentifier
-from bacpypes3.constructeddata import Array
-from bacpypes3.errors import ExecutionError
-from bacpypes3.ipv4.app import NormalApplication
-from bacpypes3.local.analog import AnalogInputObject, AnalogValueObject
-from bacpypes3.local.device import DeviceObject
-from bacpypes3.pdu import IPv4Address
-from bacpypes3.primitivedata import Null, Unsigned
+try:
+    from bacpypes3.apdu import ReadPropertyACK, ReadPropertyRequest, SimpleAckPDU, WritePropertyRequest
+    from bacpypes3.basetypes import EngineeringUnits, PropertyIdentifier
+    from bacpypes3.constructeddata import Array
+    from bacpypes3.errors import ExecutionError
+    from bacpypes3.ipv4.app import NormalApplication
+    from bacpypes3.local.analog import AnalogInputObject, AnalogValueObject
+    from bacpypes3.local.device import DeviceObject
+    from bacpypes3.pdu import IPv4Address
+    from bacpypes3.primitivedata import Null, Unsigned
+    _BACPYPES_IMPORT_ERROR: ModuleNotFoundError | None = None
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised when deps are absent
+    _BACPYPES_IMPORT_ERROR = exc
+
+    class _MissingBacpypes:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise ModuleNotFoundError(
+                "bacpypes3 is required for BACnet runtime objects"
+            ) from _BACPYPES_IMPORT_ERROR
+
+    class _MissingApplication:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise ModuleNotFoundError(
+                "bacpypes3 is required to start the BACnet server"
+            ) from _BACPYPES_IMPORT_ERROR
+
+    class PropertyIdentifier(str):  # type: ignore[no-redef]
+        pass
+
+    class Null:  # type: ignore[no-redef]
+        pass
+
+    class Unsigned(int):  # type: ignore[no-redef]
+        pass
+
+    class Array:  # type: ignore[no-redef]
+        pass
+
+    class ExecutionError(Exception):  # type: ignore[no-redef]
+        pass
+
+    ReadPropertyACK = _MissingBacpypes  # type: ignore[assignment]
+    ReadPropertyRequest = _MissingBacpypes  # type: ignore[assignment]
+    SimpleAckPDU = _MissingBacpypes  # type: ignore[assignment]
+    WritePropertyRequest = _MissingBacpypes  # type: ignore[assignment]
+    EngineeringUnits = _MissingBacpypes  # type: ignore[assignment]
+    NormalApplication = _MissingApplication  # type: ignore[assignment]
+    AnalogInputObject = _MissingBacpypes  # type: ignore[assignment]
+    AnalogValueObject = _MissingBacpypes  # type: ignore[assignment]
+    DeviceObject = _MissingBacpypes  # type: ignore[assignment]
+    IPv4Address = _MissingBacpypes  # type: ignore[assignment]
 
 import yaml
 
@@ -50,14 +92,19 @@ class PointRegistry:
         for tstat_cfg in cfg.thermostats.values():
             for point_cfg in tstat_cfg.points.values():
                 runtime = PointRuntime(cfg=point_cfg, value=None)
-                key = (point_cfg.bacnet.object_type, point_cfg.bacnet.instance)
-                self._points[key] = runtime
+                for object_type in _object_type_aliases(point_cfg.bacnet.object_type):
+                    key = (object_type, point_cfg.bacnet.instance)
+                    self._points[key] = runtime
                 self._points_by_addr[(point_cfg.comm_addr, point_cfg.point_addr)] = runtime
                 logger.debug("Registered point %s -> %s", key, runtime)
 
     def get_by_bacnet(self, object_type: str, instance: int) -> PointRuntime | None:
         with self._lock:
-            return self._points.get((object_type, instance))
+            for alias in _object_type_aliases(object_type):
+                runtime = self._points.get((alias, instance))
+                if runtime is not None:
+                    return runtime
+            return None
 
     def get_by_address(self, comm_addr: int, point_addr: int) -> PointRuntime | None:
         with self._lock:
@@ -102,7 +149,15 @@ class PointRegistry:
 
     def runtimes(self) -> Iterable[PointRuntime]:
         with self._lock:
-            return list(self._points.values())
+            seen: set[int] = set()
+            runtimes: list[PointRuntime] = []
+            for runtime in self._points.values():
+                marker = id(runtime)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                runtimes.append(runtime)
+            return runtimes
 
 
 @dataclass
@@ -403,6 +458,22 @@ def build_local_device(device_id: int, device_name: str) -> DeviceObject:
         protocolVersion=1,
         protocolRevision=7,
     )
+
+
+def _object_type_aliases(object_type: str) -> tuple[str, ...]:
+    normalized = str(object_type)
+    kebab = _camel_to_kebab(normalized)
+    compact = kebab.replace("-", "")
+    return tuple(dict.fromkeys((normalized, kebab, compact)))
+
+
+def _camel_to_kebab(value: str) -> str:
+    chars: list[str] = []
+    for idx, char in enumerate(value):
+        if char.isupper() and idx > 0 and value[idx - 1] != "-":
+            chars.append("-")
+        chars.append(char.lower())
+    return "".join(chars)
 
 
 def _units_for_point(point_cfg: PointConfig) -> EngineeringUnits:
